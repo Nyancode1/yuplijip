@@ -190,8 +190,10 @@ function drawCard(open,book) {
   art.setAttribute('aria-hidden','true');
   if (covers.length) art.append(...covers.map(url=>picture({art:url})));
   else art.append(element('span','art','♫'));
-  open.replaceChildren(art,element('strong','bookName',book.name));
-  if (Number.isInteger(book.count)) open.append(element('small','bookCount',book.count+'곡'));
+  const details = element('span','bookDetails');
+  details.append(element('strong','bookName',book.name));
+  if (Number.isInteger(book.count)) details.append(element('small','bookCount',book.count+'곡'));
+  open.replaceChildren(art,details);
 }
 function drawBooks() {
   const links = el('bookLinks');
