@@ -148,6 +148,14 @@ test('일반 영상은 가수와 일치하는 구분자 양쪽 및 인용 제목
   }
 });
 
+test('배급사 채널 영상은 MV 앞의 가수와 인용된 곡명이 TJ의 같은 행과 일치해야 한다', () => {
+  const songs = [row('71','春の果て','歌手A'), row('72','春の果て','歌手B')];
+  const song = { title:'歌手A MV 『春の果て』', uploader:'배급사 채널' };
+  assert.equal(match(song, songs).row?.karaoke_numbers.tj, '71');
+  assert.equal(match({ ...song, title:'다른 가수 MV 『春の果て』' }, songs).row, undefined);
+  assert.equal(match({ ...song, title:'歌手A MV 『春の果て』 Cover' }, songs).row, undefined);
+});
+
 test('한국어 설명과 기호 사이에 적힌 원제·가수는 한 쌍으로 대조한다', () => {
   const songs = [row('12', '風の音', 'Band'), row('13', '風の音', 'Other')];
   for (const title of ['Band - 바람 소리（風の音）｜ 가수 Cover', '바람 소리【風の音】 – Band / 가수 cover',

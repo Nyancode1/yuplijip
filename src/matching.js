@@ -106,6 +106,12 @@ function videoEvidence(input) {
       const beforeCover = title.match(/^(.+?)\s+[|│/]\s+.+?\bcover\b/i);
       if (beforeCover) names.push(beforeCover[1]);
     } else {
+      // 배급사 채널의 영상도 제목에 표기된 가수·곡명과 TJ 등록 정보로 직접 대조한다.
+      const musicVideo = title.match(/^([^「『|/]+?)\s+(?:official\s+)?(?:music\s+video|MV)\s*[「『]([^「」『』]+)[」』]\s*$/iu);
+      if (musicVideo) {
+        names.push(musicVideo[2].trim());
+        sourceArtists.push(musicVideo[1].trim());
+      }
       for (const split of title.matchAll(/\s+[-–—/]\s+/g)) {
         const left = title.slice(0, split.index), right = title.slice(split.index + split[0].length);
         if (creditedNames.has(key(left)) || titles.some(other => key(other) === key(left))) names.push(right);
