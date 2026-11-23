@@ -49,6 +49,7 @@ foreach ($asset in @('index.html','app.js','app.css','playlist.js','youtube.js',
     $archiveArgs += @('-C',$packageDir,"assets/$asset")
 }
 $archiveArgs += @('-C',$packageDir,'assets/licenses/unicode.txt')
+$archiveArgs += @('-C',$packageDir,'assets/release_credits.json')
 Run-Tool "$JdkPath\bin\jar.exe" $archiveArgs
 Run-Tool "$toolsPath\zipalign.exe" @('-f','4',"$stage\base.apk","$stage\aligned.apk")
 if (!(Test-Path -LiteralPath $keystore)) {

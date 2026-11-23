@@ -27,7 +27,7 @@ async function run() {
   const songs = require('./catalog')();
   const reading = await createReader();
   const works = [...require('../data/work_sources.json'), ...require('../data/recording_aliases.json')];
-  const index = indexCatalog(songs, reading, { works, loanwords:require('../data/loanwords.json') });
+  const index = indexCatalog(songs, reading, { works, loanwords:require('../data/loanwords.json'), credits:require('../data/release_credits.json') });
   const results=selectPlaylist(inputs,index,reading);
   const csv = [['플레이리스트 곡명', '검색어', 'TJ 곡번호', 'TJ 곡제목', 'TJ 가수명', '비고', '업로더', '영상 ID', '상태', '확인 후보', '입력 가수']];
   const summary = [];

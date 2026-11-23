@@ -10,6 +10,10 @@
 
 ## 곡명과 원곡 식별 자료
 
+- MusicBrainz 발매 트랙의 현지 제목은 같은 녹음 식별자와 가수 식별자를 기준으로 연결합니다. [MusicBrainz 데이터 라이선스](https://musicbrainz.org/doc/About/Data_License)
+
+- `data/release_credits.json`에는 iTunes Store 일본·미국의 동일 트랙 식별자에 연결된 곡명과 가수 표기, Apple Music의 작곡 크레딧, しょぼいカレンダー의 애니메이션 주제가 가창·작곡 크레딧, 니코니코 커버 제작자가 원곡으로 지목한 영상의 식별자 쌍을 수록합니다. [iTunes Search API](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) · [Apple Music](https://music.apple.com/jp/) · [しょぼいカレンダー](https://cal.syoboi.jp/) · [니코니코 동화](https://www.nicovideo.jp/)
+
 - `data/work_sources.json`은 VocaDB 기여자들의 곡명, 참여자, 원곡·파생곡 관계와 영상 식별자를 추출해 TJ 번호와 대조한 자료입니다. 각 작품의 `id`는 VocaDB 작품 번호입니다. 이 데이터는 CC BY 4.0으로 배포합니다. [VocaDB](https://vocadb.net/) · [이용 조건](https://wiki.vocadb.net/docs/license) · [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 - `data/recording_aliases.json`은 Wikidata 기여자들이 공개한 가수·작품 식별자와 언어별 명칭을 TJ 곡목과 대조한 자료입니다. 원본 구조화 데이터에는 CC0가 적용됩니다. [Wikidata 라이선스](https://www.wikidata.org/wiki/Wikidata:Licensing)
 - `data/loanwords.json`은 Electronic Dictionary Research and Development Group의 JMdict 일본어·영어 사전에서 번호책에 쓰인 가타카나 표기와 영문 풀이를 선별하고 정규화한 자료입니다. 사전과 이 파생 파일은 CC BY-SA 4.0으로 배포합니다. [JMdict 저작권 및 이용 조건](https://www.edrdg.org/edrdg/licence.html) · [사용한 JSON 배포판](https://github.com/scriptin/jmdict-simplified/releases/tag/3.6.2%2B20261116213322) · [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)

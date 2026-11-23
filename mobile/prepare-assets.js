@@ -24,6 +24,7 @@ function prepare() {
     'docs/unicode-license.txt': 'licenses/unicode.txt',
     'data/alfex-SOURCE.txt': 'licenses/alfex-source.txt',
     'data/loanwords.json':'loanwords.json',
+    'data/release_credits.json':'release_credits.json',
   };
   for (const [src, dst] of Object.entries(copies)) {
     fs.cpSync(resolve(src), path.join(assets, dst), { recursive: true });

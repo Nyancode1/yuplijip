@@ -1,13 +1,13 @@
 importScripts('lib/wanakana.js', 'lib/kuromoji.js', 'youtube.js', 'lib/matching.js');
 let ready;
 async function prepare() {
-  const [songs, tokenizer, loanwords, works] = await Promise.all([
+  const [songs, tokenizer, loanwords, works, credits] = await Promise.all([
     fetch('catalog.json').then(r => r.json()),
     new Promise((resolve, reject) => kuromoji.builder({ dicPath: 'dict' }).build((err,t) => err ? reject(err) : resolve(t))),
-    ...['loanwords.json','work_sources.json'].map(name=>fetch(name).then(r=>r.json())),
+    ...['loanwords.json','work_sources.json','release_credits.json'].map(name=>fetch(name).then(r=>r.json())),
   ]);
   const reading = TJMatching.makeReader(tokenizer);
-  return { reading, index: TJMatching.indexCatalog(songs, reading,{loanwords,works}),
+  return { reading, index: TJMatching.indexCatalog(songs, reading,{loanwords,works,credits}),
     byNumber:new Map(songs.map(row => [row.karaoke_numbers.tj, row])) };
 }
 self.onmessage = async event => {

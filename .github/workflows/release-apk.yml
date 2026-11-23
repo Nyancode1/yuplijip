@@ -32,6 +32,12 @@ jobs:
           signer=$("$tools/apksigner" verify --print-certs "$apk") || { echo "::error::APK signature verification failed"; exit 1; }
           grep -Fxq 'Signer #1 certificate SHA-256 digest: 286293f24da8043bf474cac001344509fdb3fee9f3c5e47a9da9346e9f226095' <<< "$signer" || { echo "::error::Unexpected signing certificate"; exit 1; }
           test "$(unzip -p "$apk" assets/update-repository.txt)" = "$GITHUB_REPOSITORY" || { echo "::error::Unexpected update repository"; exit 1; }
+          unzip -p "$apk" assets/release_credits.json > "$RUNNER_TEMP/packaged-credits.json"
+          jq -e --slurp 'length == 2 and .[0] == .[1]' data/release_credits.json "$RUNNER_TEMP/packaged-credits.json" > /dev/null
+          diff -q --strip-trailing-cr src/matching.js <(unzip -p "$apk" assets/lib/matching.js)
+          for asset in app.js worker.js; do
+            diff -q --strip-trailing-cr "mobile/ui/$asset" <(unzip -p "$apk" "assets/$asset")
+          done
           info=$("$tools/aapt" dump badging "$apk")
           pattern="^package: name='app[.]songbook[.]tj' versionCode='([1-9][0-9]*)' versionName='([0-9]+([.][0-9]+){1,3})'"
           [[ "$info" =~ $pattern ]] || { echo "::error::Unexpected manifest package or version"; exit 1; }

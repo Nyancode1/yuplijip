@@ -41,6 +41,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1
 
 ## 곡목 관리
 
+`node src/update_release_credits.js`는 `data/credit_sources.json`의 가수 목록, 방송 작품 ID, 니코니코 영상 ID를 읽어 음원의 현지화 제목과 커버 근거를 생성합니다. 생성 결과는 모바일과 CLI가 공유합니다. 조회 캐시는 `mobile/build/release-credits/`에 저장합니다.
+
 `src/export_alfex.js`는 Alfex 번호책의 일본곡 검색 결과에서 번호·제목·가수와 제공된 한글 독음을 읽습니다. 내보낸 JSON에 `node src/import_catalog.js <파일>`을 실행하면 중복 번호와 필수 항목을 검증합니다. `node src/update_tj_catalog.js`는 TJ 최신곡의 번호·제목·가수를 공식 일본곡 검색과 대조해 추가합니다. 곡목을 바꾼 뒤 APK를 다시 빌드합니다.
 
 개인 곡 목록을 PC에서 변환하려면 `npm run match -- <목록 파일>`을 실행합니다. 변환 결과는 `private/pc/data/`에 저장됩니다.

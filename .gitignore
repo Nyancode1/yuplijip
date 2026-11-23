@@ -8,6 +8,8 @@
 !/data/loanwords.json
 !/data/work_sources.json
 !/data/recording_aliases.json
+!/data/credit_sources.json
+!/data/release_credits.json
 !/data/alfex-SOURCE.txt
 /release/*
 !/release/yuplijip.apk

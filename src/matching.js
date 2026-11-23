@@ -54,6 +54,8 @@ function titleParts(text) {
     return { base: cleaned.slice(0, tail.index).trim(), version: 'rerecording' };
   }
   const label = suffix && (suffix[1] || suffix[2]);
+  if(label && /^TV[ -]?(?:size|edit|version|ver\.?)$/iu.test(label))
+    return {base:cleaned.slice(0,suffix.index).trim(),version:'tvsize'};
   if (label && /\b(?:ver(?:sion)?|live|remix|acoustic|ballad|edit|instrumental)\b/i.test(label)) {
     const version = key(label.replace(/\b(?:version|ver)\b\.?/gi, '')) || key(label);
     return { base: cleaned.slice(0, suffix.index).trim(), version };
@@ -64,7 +66,7 @@ function titleParts(text) {
 function cleanChannel(name) {
   return (name || '').normalize('NFKC')
     .replace(/\s*[-–—]\s*(?:Topic|トピック|주제)\s*$/iu, '')
-    .replace(/[\s_【([]*(?:official(?:\s+(?:YouTube\s+)?channel)?|YouTube\s+channel)[】)\]]*$/i, '')
+    .replace(/[\s_【([]*(?:official(?:\s+(?:(?:YouTube|artist)\s+)?channel)?|YouTube\s+channel)[】)\]]*$/i, '')
     .trim();
 }
 
@@ -78,7 +80,8 @@ function artistForms(name) {
     || clean.match(/^([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー ･・]+)\s+([\p{Script=Latin}\s.-]+)$/u);
   const credited = clean.match(/^(.+?)\s*\(([^()]+)\)$/u);
   const korean=clean.match(/^([가-힣 ][가-힣 ]+)\s+([a-z][a-z0-9 .'-]+)$/iu) || clean.match(/^([a-z][a-z0-9 .'-]+)\s+([가-힣][가-힣 ]*)$/iu);
-  return unique([clean, first, expanded, credited?.[1], ...(bilingual ? bilingual.slice(1) : []),...(korean?korean.slice(1).map(s=>s.trim()):[])]);
+  const alternate=credit && japanese.test(first)!==japanese.test(credit) && !credit.includes('/') ? credit : '';
+  return unique([clean, first, expanded, alternate, credited?.[1], ...(bilingual ? bilingual.slice(1) : []),...(korean?korean.slice(1).map(s=>s.trim()):[])]);
 }
 
 function loanwordKey(text) {
@@ -136,6 +139,8 @@ function videoEvidence(input) {
   }
   for (const raw of titles) {
     const title = raw.normalize('NFKC');
+    const dance=title.match(/^【([^【】]+)】\s*([^【】]+?)\s+踊ってみた[。!！]?$/u);
+    if(dance && channels.some(c=>artistKey(cleanChannel(c))===artistKey(dance[1])))names.push(dance[2]);
     const clip=title.match(/^[【\[](?:歌ってみた|cover)[】\]]\s*([^/【|]+?)(?=\s*[/【|]|$)/iu);
     if (clip) names.push(clip[1].trim());
     if (/[가-힣]/u.test(title)) for (const phrase of title.matchAll(/(?:^|[^\p{sc=Latin}])([A-Za-z]+(?:\s+[A-Za-z]+){1,6})(?=[^A-Za-z]|$)/gu)) {
@@ -210,11 +215,27 @@ function videoEvidence(input) {
   return { titles: unique(names), artists: unique(sourceArtists.flatMap(artistForms)) };
 }
 
-function indexCatalog(songs, reading, {loanwords={},works=[]}={}) {
+function indexCatalog(songs, reading, {loanwords={},works=[],credits={}}={}) {
   const byTitle = new Map();
   const extra=new Map(), extraRecords=new WeakMap(), numbers=new Map(), pvs=new Map();
   const aliases=new Map(), workNames=new Map(), vocalTitles=new Map(), hanReadings=new Set();
   const koreanCredits=new Map(), composerNames=new Map();
+  const localized=new Map(), tracksByTitle=new Map(), themesByTitle=new Map();
+  const releaseBase=t=>titleParts(t).base.replace(/\s*\([^()]*\bfrom\b[^()]*\)\s*$/iu,'').trim();
+  for(const track of credits.tracks||[]) {
+    const term=key(releaseBase(track.title));
+    if(!tracksByTitle.has(term))tracksByTitle.set(term,[]);
+    tracksByTitle.get(term).push(track);
+    for(const t of unique([track.localTitle,track.title]).map(key)) {
+      if(!localized.has(t))localized.set(t,[]);
+      localized.get(t).push(track);
+    }
+  }
+  for(const theme of credits.themes||[]){
+    const t=key(theme.title);
+    if(!themesByTitle.has(t))themesByTitle.set(t,[]);
+    themesByTitle.get(t).push(theme);
+  }
   for (const row of songs) numbers.set(row.karaoke_numbers.tj,row);
   for (const row of songs) if (!row.supplement && row.artist_ko) {
     const name=artistKey(artistForms(row.artist_primary)[0]||''), korean=artistKey(artistForms(row.artist_ko)[0]||'');
@@ -246,6 +267,12 @@ function indexCatalog(songs, reading, {loanwords={},works=[]}={}) {
       const refs=pvs.get(id)||new Set(); refs.add(work.number); pvs.set(id,refs);
     }
   }
+  for(const ref of credits.nico||[]) {
+    const parent=pvs.get('NicoNicoDouga:'+ref.original);
+    if(!parent?.size)continue;
+    const id='NicoNicoDouga:'+ref.id;
+    pvs.set(id,new Set([...(pvs.get(id)||[]),...parent]));
+  }
   for (const row of songs) {
     const num=row.karaoke_numbers.tj;
     if (row.supplement) {
@@ -269,14 +296,18 @@ function indexCatalog(songs, reading, {loanwords={},works=[]}={}) {
     const composerKeys=new Set(composers.map(artistKey));
     for (const name of composers) for (const alias of composerNames.get(key(artistForms(row.artist_primary)[0])+'|'+key(name))||[])
       composerKeys.add(alias);
-    const record = { row, artistKeys, artistReadings, composerKeys, coverArtists:new Set(), version: titleParts(row.title_primary).version };
+    const record = { row, artistKeys, artistReadings, composerKeys, coverArtists:new Set(), featuredArtists:new Set(), version: titleParts(row.title_primary).version };
     // 원본 데이터가 자동 번역으로 표시한 별칭은 사용하지 않는다.
-    const titles = [row.title_primary, row.title_ruby];
+    const titles = [row.title_primary, row.title_ruby, releaseBase(row.title_primary)];
     if (row.title_ko_source !== 'llm-translated') titles.push(row.title_ko);
     for (const name of unique(titles)) {
       const { base } = titleParts(name);
       const kanjiReading = kanji.test(base) || (name === row.title_ruby && kanji.test(titleParts(row.title_primary).base));
       const sound = reading(base);
+      if(sound.length>=7 && /^[\p{sc=Katakana}ー・\s]+$/u.test(base)){
+        const k='katakana:'+sound.replace(/l/g,'r');
+        const bucket=byTitle.get(k)||new Map();bucket.set(record,1);byTitle.set(k,bucket);
+      }
       let converted=false;
       const borrowed = base.replace(/[\p{sc=Katakana}ー・]+/gu,part=>{
         const english=loanwords[key(part)];
@@ -310,8 +341,31 @@ function indexCatalog(songs, reading, {loanwords={},works=[]}={}) {
         bucket.set(record,Math.max(bucket.get(record)||0,2)); byTitle.set(k,bucket);
       }
     }
+    const primary=key(releaseBase(row.title_primary));
+    const catalogArtists=new Set(artistKeys);
+    for(const track of tracksByTitle.get(primary)||[]){
+      if(titleParts(track.title).version!==record.version||titleParts(track.localTitle).version!==record.version)continue;
+      const performer=artistForms(track.artist).some(a=>catalogArtists.has(artistKey(a)));
+      const sameWork=track.composers?.length && track.composers.every(c=>composerKeys.has(artistKey(c))) &&
+        (row.composer||'').split(/[,、/&]/u).every(c=>track.composers.some(w=>artistKey(w)===artistKey(c)));
+      if(!performer&&!sameWork)continue;
+      const target=performer?artistKeys:record.coverArtists;
+      for(const name of [track.artist,track.localArtist].flatMap(artistForms))target.add(artistKey(name));
+      if(performer)for(const name of [track.artist,track.localArtist]){
+        const duet=name.split(/\s+[&×]\s+/u);
+        if(duet.length>1)for(const person of duet)record.featuredArtists.add(artistKey(person));
+      }
+      const t=key(releaseBase(track.localTitle)),names=workNames.get(num)||new Set();
+      names.add(t);workNames.set(num,names);
+      const bucket=byTitle.get(t)||new Map();
+      bucket.set(record,Math.max(2,bucket.get(record)||0));byTitle.set(t,bucket);
+    }
+    for(const theme of themesByTitle.get(primary)||[]) {
+      if(!composerKeys.has(artistKey(theme.composer)))continue;
+      record.coverArtists.add(artistKey(theme.artist.replace(/\(.*$/u,'').trim()));
+    }
   }
-  return { numbers,pvs,workNames,vocalTitles,hanReadings,get(term) {
+  return { numbers,pvs,workNames,vocalTitles,hanReadings,localized,get(term) {
     if (!term) return undefined;
     const additional=extra.get(term);
     if (additional) {
@@ -709,14 +763,26 @@ function recordingArtistConflict(input, record) {
   if (!artists.length && (!names.length || !namedChannel)) return false;
   const credits = artists.length ? artists : names;
   return !credits.some(credit => cleanChannel(credit).split(/\s+\/\s+/u).flatMap(artistForms)
-    .some(form => record.artistKeys.has(artistKey(form)) || record.coverArtists?.has(artistKey(form))));
+    .some(form => record.artistKeys.has(artistKey(form)) || record.coverArtists?.has(artistKey(form)) ||
+      record.featuredArtists?.has(artistKey(form))));
 }
 
 // 원곡자·작곡자를 직접 명시했다면 곡명, 독음 또는 영상 링크로 이 모순을 덮어쓰지 않는다.
 function checkDeclaredCredits(input, result, index) {
   const row = result.row || result.titleCandidate || (result.candidates.length === 1 && result.candidates[0]);
   if (!row) return result;
-  const {artists, composers} = labeledCredits(input);
+  const {originals, artists, composers} = labeledCredits(input);
+  // 자막 재게시의 번역명·가수 문구만으로는 실제 녹음 출처를 확정할 수 없다.
+  if(result.row && /(?:한글|한국어)\s*(?:가사|자막)|\[(?:자막|가사)\]/u.test(input.title) &&
+      !input.originalVideo && !/^Provided to YouTube by /mu.test(input.description||'') &&
+      !artists.length && !composers.length && !/커버|\bcover(?:ed)?\b|歌ってみた/iu.test(input.title) &&
+      ![...sourceIds(input)].some(id=>index.pvs.get(id)?.has(row.karaoke_numbers.tj))){
+    const rowEntries=index.get(key(titleParts(row.title_primary).base));
+    const record=[...(rowEntries||[])].find(([entry])=>entry.row===row)?.[0];
+    const credited=originals.some(name=>record?.artistKeys.has(artistKey(name))||record?.composerKeys.has(artistKey(name)));
+    if(!credited||!sourceIds(input).size)
+      return {...result,row:undefined,titleCandidate:row,candidates:[row],status:'확인 필요',reason:'자막 영상의 작품 표기는 일치하나 녹음 출처 미확인'};
+  }
   if (!result.row && row.composer && /^Provided to YouTube by /mu.test(input.description || '') &&
       /Auto-generated by YouTube\.\s*$/u.test(input.description)) {
     // 배급사의 영문 활동명은 보컬로이드 원작자 별칭일 수 있다. 후보를 배제할 때도 작품 크레딧 전체를 확인한다.
@@ -766,6 +832,26 @@ function selectRecording(input, index, reading) {
     return { status: '스킵', reason: '비공개 또는 삭제된 영상', keywords: [], candidates: [] };
   }
   const evidence = videoEvidence(input);
+  const creditsChannel=cleanChannel(input.uploader).split(/\s+\/\s+/u);
+  if(creditsChannel.length===2){
+    const [first,second]=creditsChannel.map(artistKey);
+    for(const title of evidence.titles)for(const [r,rank] of index.get(key(titleParts(title).base))||[]){
+      const paired=r.artistKeys.has(first)&&r.composerKeys.has(second) ||
+        r.artistKeys.has(second)&&r.composerKeys.has(first);
+      if(rank>=2 && paired)evidence.artists.push(...creditsChannel);
+    }
+  }
+  // 한 발매 트랙의 두 지역 표기는 그 트랙의 가창자까지 일치할 때만 입력에 보탠다.
+  const performerKeys=new Set(evidence.artists.map(artistKey));
+  for(const title of [...evidence.titles]){
+    const tracks=(index.localized.get(key(title))||[]).filter(t=>
+      [t.localArtist,t.artist].flatMap(artistForms).some(a=>performerKeys.has(artistKey(a))));
+    const originals=unique(tracks.map(t=>t.title));
+    if(originals.length===1){
+      evidence.titles.push(originals[0]);
+      evidence.artists.push(...unique(tracks.flatMap(t=>artistForms(t.artist))));
+    }
+  }
   const descriptionCredits = labeledCredits(input).originals;
   const labeledTitles = descriptionCredits.filter(t => japanese.test(t) && !creditSeparator.test(t) && !/[「『]/u.test(t));
   if (labeledTitles.length === 1) evidence.titles.push(labeledTitles[0]);
@@ -792,6 +878,9 @@ function selectRecording(input, index, reading) {
   }
   const hits = new Map();
   for (const name of keywords) {
+    if(/^[A-Za-z -]{7,}$/u.test(name))for(const [r] of index.get('katakana:'+key(name).replace(/l/g,'r'))||[]){
+      if(artists.some(a=>r.artistKeys.has(a)))hits.set(r,Math.max(1,hits.get(r)||0));
+    }
     for (const [term, strength] of [[key(name), 3], [loanwordKey(name), 2], [reading(name), kanji.test(name) ? 1 : 2],
       [/^[a-z ]+$/i.test(name) ? phoneticKey(name) : '', 2]]) {
       for (const [record, indexedStrength] of index.get(term) || []) {
@@ -830,9 +919,9 @@ function selectRecording(input, index, reading) {
     }
   }
   if (!eligible.length && !versions.length) {
-    const composerLines=(input.description||'').matchAll(/^(?=[^:\r\n]{0,100}\bComposer\b)[\w, -]+:\s*([^\r\n]+)/gimu);
+    const composerLines=(input.description||'').matchAll(/^(?=[^:\r\n]{0,160}\bComposer\b)[\w, -]+:\s*([^\r\n]+)/gimu);
     const declared=/^Provided to YouTube by /mu.test(input.description||'') && /Auto-generated by YouTube\./u.test(input.description||'')
-      ? [...composerLines].map(m=>artistKey(m[1])) : [];
+      ? [...composerLines].map(m=>m[1].trim()) : [];
     const workCredits=[...(input.description||'').matchAll(/^[^\p{L}\p{N}\r\n]*(?:Music|Composer|作曲|作詞作曲|작곡)\s*[:：]\s*([^\r\n:：/]{1,65})$/gimu)]
       .map(m=>artistKey(m[1].trim().replace(/(?:様|さん)$/u,''))).filter(Boolean);
     const texts=originalTitles.map(t=>key(t));
@@ -841,7 +930,14 @@ function selectRecording(input, index, reading) {
       const credited=r.composerKeys || new Set((r.row.composer||'').split(/[,、/&]/u).map(artistKey));
       const base=titleParts(r.row.title_primary).base;
       const exactReading=rank>0 && !kanji.test(base) && keywords.some(k=>/^[a-z ]{5,}$/iu.test(k) && key(k)===reading(base));
-      if ((rank===2 || exactReading) && declared.length && declared.every(a=>a && credited.has(a))) return true;
+      if ((rank===2 || exactReading) && declared.length && declared.every(name=>{
+        if(credited.has(artistKey(name)))return true;
+        const words=name.toLowerCase().match(/^[a-z]+[ -]([a-z]+)$/u) && name.toLowerCase().split(/[ -]/u);
+        if(!words)return false;
+        const latin=s=>shortVowels(s.replace(/oh/g,'o'));
+        const forms=[latin(words.join('')),latin([...words].reverse().join(''))];
+        return [...credited].some(a=>forms.includes(latin(reading(a)||a)));
+      })) return true;
       if (rank!==2) return false;
       if (workCredits.some(a=>credited.has(a))) return true;
       const author=[...input.title.normalize('NFKC').matchAll(/\s\/\s*([^/【]+?)\s*【covered\s+by\b/giu)].map(m=>artistKey(m[1]));
@@ -866,14 +962,20 @@ function selectRecording(input, index, reading) {
     if (best.length === 1) return { status: '자동 확정', row: best[0].row, keywords, candidates: [],
       reason: (rank === 2 ? '제목·별칭' : '제목 독음·표기 변형') + ' 및 가수 일치' };
   }
-  if (!matchingVersion.length && versions.length === 1 && versions[0] === 'rerecording') {
-    const originals = direct.filter(r => !r.version && hits.get(r) === 2);
+  if (!matchingVersion.length && versions.length === 1 && ['rerecording','tvsize'].includes(versions[0])) {
+    const originals = direct.filter(r => !r.version && (hits.get(r) === 2 || versions[0]==='tvsize' &&
+      keywords.some(t=>index.workNames.get(r.row.karaoke_numbers.tj)?.has(key(t)))));
     if (originals.length === 1) {
       return { status: '원곡 반주', row: originals[0].row, keywords, candidates: [],
-        reason: '재녹음 음원입니다. 같은 제목·가수로 등록된 원곡 반주 번호입니다.' };
+        reason: '같은 제목·가수로 등록된 원곡 반주와 일치하는 다른 길이 또는 재녹음 음원' };
     }
   }
   const candidates = (sameArtist.length ? sameArtist : [...hits.keys()]).map(r => r.row);
+  if(!versions.length && hits.size===1){
+    const [[record,rank]]=hits;
+    if(rank===2 && artists.some(a=>record.featuredArtists?.has(a)))
+      return {status:'확인 필요',reason:'곡명과 배급 음원의 공동 가창자 한 명이 일치',keywords,candidates:[record.row],titleCandidate:record.row};
+  }
   const reason = !artists.length ? '원곡 가수 근거 없음' : !sameArtist.length ? '가수 불일치' :
     !matchingVersion.length ? '버전 일치 확인 필요' : !eligible.length ? '한자 표기가 다르고 독음만 일치' :
     '동일 가수의 후보 번호 여러 개';
