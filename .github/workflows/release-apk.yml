@@ -2,7 +2,7 @@ name: Publish Android update
 on:
   push:
     branches: [main]
-    paths: ['release/yuplijip.apk']
+    paths: ['release/yuplijip.apk', '.github/workflows/release-apk.yml']
   workflow_dispatch:
 
 permissions:
@@ -27,13 +27,14 @@ jobs:
           set -euo pipefail
           apk=release/yuplijip.apk
           test -f "$apk"
-          tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
-          signer=$("$tools/apksigner" verify --print-certs "$apk")
-          grep -Fxq 'Signer #1 certificate SHA-256 digest: 286293f24da8043bf474cac001344509fdb3fee9f3c5e47a9da9346e9f226095' <<< "$signer"
-          test "$(unzip -p "$apk" assets/update-repository.txt)" = "$GITHUB_REPOSITORY"
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          if [[ ! -x "$tools/apksigner" ]]; then sdkmanager 'build-tools;35.0.0'; fi
+          signer=$("$tools/apksigner" verify --print-certs "$apk") || { echo "::error::APK signature verification failed"; exit 1; }
+          grep -Fxq 'Signer #1 certificate SHA-256 digest: 286293f24da8043bf474cac001344509fdb3fee9f3c5e47a9da9346e9f226095' <<< "$signer" || { echo "::error::Unexpected signing certificate"; exit 1; }
+          test "$(unzip -p "$apk" assets/update-repository.txt)" = "$GITHUB_REPOSITORY" || { echo "::error::Unexpected update repository"; exit 1; }
           info=$("$tools/aapt" dump badging "$apk")
           pattern="^package: name='app[.]songbook[.]tj' versionCode='([1-9][0-9]*)' versionName='([0-9]+([.][0-9]+){1,3})'"
-          [[ "$info" =~ $pattern ]]
+          [[ "$info" =~ $pattern ]] || { echo "::error::Unexpected manifest package or version"; exit 1; }
           code=${BASH_REMATCH[1]}
           tag="v${BASH_REMATCH[2]}-$code"
           releases=$(gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100")
@@ -42,10 +43,7 @@ jobs:
             # A re-run is successful only if the published asset is byte-identical.
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern yuplijip.apk --dir "$RUNNER_TEMP/published"
             cmp "$apk" "$RUNNER_TEMP/published/yuplijip.apk"
-            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern yuplijip.zip --dir "$RUNNER_TEMP/published"
-            python3 -c "from zipfile import ZipFile; from pathlib import Path; import sys; z=ZipFile(sys.argv[1]); assert z.namelist()==['유플리집.apk'] and z.read('유플리집.apk')==Path(sys.argv[2]).read_bytes()" "$RUNNER_TEMP/published/yuplijip.zip" "$apk"
             exit 0
           fi
           (( code > highest ))
-          python3 -c "from zipfile import ZIP_DEFLATED, ZipFile; import sys; z=ZipFile(sys.argv[1], 'w', ZIP_DEFLATED); z.write(sys.argv[2], '유플리집.apk'); z.close()" "$RUNNER_TEMP/yuplijip.zip" "$apk"
-          gh release create "$tag" "$apk#유플리집.apk" "$RUNNER_TEMP/yuplijip.zip#유플리집.zip" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "유플리집 ${tag%-*}" --notes "Android 앱에서 업데이트할 수 있습니다."
+          gh release create "$tag" "$apk#유플리집.apk" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "유플리집 ${tag%-*}" --notes "Android 앱에서 업데이트할 수 있습니다."

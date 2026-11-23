@@ -31,7 +31,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1
 
 1. `mobile/AndroidManifest.xml`에서 버전 이름과 버전 코드를 올립니다. 같은 버전 표기를 쓰도록 `package.json`과 잠금 파일도 갱신합니다.
 2. 기존 서명 키가 있는 PC에서 `powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1 -Release`를 실행합니다.
-3. 생성한 APK를 `release/yuplijip.apk`로 복사하고 `main` 브랜치에 올립니다. GitHub Actions가 패키지명, 서명, 업데이트 대상 저장소와 버전 순서를 확인하고 APK와 ZIP을 정식 릴리스에 게시합니다. 1.5.1의 태그는 `v1.5.1-7`입니다.
+3. 생성한 APK를 `release/yuplijip.apk`로 복사하고 `main` 브랜치에 올립니다. GitHub Actions가 패키지명, 서명, 업데이트 대상 저장소와 버전 순서를 확인하고 APK 한 개를 정식 릴리스에 게시합니다. ZIP은 PC의 `dist/`에 보관합니다. 1.5.1의 태그는 `v1.5.1-7`입니다.
 
 업데이트 안내는 앱을 열 때 표시됩니다. Android가 설치 권한이나 추가 검사를 요청할 수 있습니다. 서명 키는 이 저장소에 포함되지 않습니다.
 
