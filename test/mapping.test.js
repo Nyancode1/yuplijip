@@ -5,6 +5,35 @@ const { mergeLocales } = require('../src/playlist');
 const mobilePlaylist = require('../mobile/ui/playlist');
 const youtube = require('../mobile/ui/youtube');
 
+test('추천은 현재 판정이 확정된 TJ 번호마다 한 곡을 담고 후보와 비공개·메들리는 제외한다', () => {
+  const cover = {title:'커버', original:true, match:{number:'1234'}};
+  const rows = [cover, {title:'원곡', match:{number:1234}}, {candidate:{number:'2000'}},
+    {private:true, match:{number:'333'}}, {parts:['메들리'], match:{number:'444'}}, {match:{number:''}}];
+  const book = {rows, matchingRevision:9};
+  assert.deepEqual([...mobilePlaylist.recommendationPool(book, 9)], [['1234',cover]]);
+  assert.equal(mobilePlaylist.recommendationPool(book, 10).size, 0);
+  assert.equal(mobilePlaylist.recommendationPool(null, 9).size, 0);
+});
+
+test('추천을 이어서 뽑으면 매 바퀴 모든 번호가 한 번씩 나오고 경계에서도 다른 곡이 나온다', () => {
+  const pool = new Map([['1',{}],['2',{}],['3',{}]]);
+  let history = [], previous;
+  for (let round = 0; round < 5; round++) {
+    const seen = new Set();
+    for (let i = 0; i < pool.size; i++) {
+      const pick = mobilePlaylist.drawNumber(pool, JSON.parse(JSON.stringify(history)));
+      assert.notEqual(pick.number, previous);
+      seen.add(pick.number);
+      history = pick.history;
+      previous = pick.number;
+    }
+    assert.deepEqual(seen, new Set(pool.keys()));
+  }
+  assert.deepEqual(mobilePlaylist.drawNumber(pool, ['삭제된 번호','1','2']), { number:'3', history:['1','2','3'] });
+  assert.deepEqual(mobilePlaylist.drawNumber(new Map([['1',{}]]), ['1']), { number:'1', history:['1'] });
+  assert.equal(mobilePlaylist.drawNumber(new Map(), []), undefined);
+});
+
 test('공유 링크의 목록 ID만 사용하고 외부 호스트 및 영상 단독 링크는 거절한다', () => {
   assert.equal(youtube.playlistId('https://music.youtube.com/playlist?list=PL_example&si=tracking'), 'PL_example');
   assert.equal(youtube.playlistId('https://youtu.be/aaaaaaaaaaa?list=PL_example'), 'PL_example');

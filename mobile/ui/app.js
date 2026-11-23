@@ -4,6 +4,9 @@ let current, lastPlaylist, selected = 'all', entries = [], worker;
 let currentId, lastId, pendingDelete, artTarget;
 const savedEntries = new Map();
 const matchingRevision = 9;
+let pickPool = new Map(), pickHistory = [];
+const pickSheet = el('recommendation');
+const pickStorageKey = id => 'tj-picks:' + id;
 const element = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -23,6 +26,14 @@ function picture(song) {
 }
 function fold(value) {
   return String(value ?? '').normalize('NFKC').toLowerCase().replace(/\s+/gu, '');
+}
+function trackCredit(row) {
+  return row.channel && row.artist && fold(row.channel) !== fold(row.artist) ?
+    row.artist + ' · ' + row.channel : row.artist || row.channel || '';
+}
+function matchLabel(row) {
+  if (!row.match) return 'TJ 후보';
+  return row.original || row.status === '원곡 반주' ? '같은 곡 TJ' : 'TJ';
 }
 function sizeTitle(line) {
   const distance = line.firstChild.scrollWidth - line.clientWidth;
@@ -58,6 +69,16 @@ function applySearch() {
   if (offset < 0) window.scrollBy(0, offset);
 }
 function showPlaylist(playlist, id = lastId) {
+  if (pickSheet.open) pickSheet.close();
+  pickPool = PlaylistReader.recommendationPool(playlist, matchingRevision);
+  if (id !== currentId) {
+    pickHistory = [];
+    if (id) try {
+      const saved = JSON.parse(localStorage.getItem(pickStorageKey(id)));
+      if (Array.isArray(saved)) pickHistory = saved;
+    } catch {}
+  }
+  el('randomSong').hidden = !pickPool.size;
   current = playlist;
   visibleTitles.disconnect();
   titleSizes.disconnect();
@@ -83,8 +104,7 @@ function showPlaylist(playlist, id = lastId) {
     const node = element('div','track'), song = element('div','trackSong'), name = element('span','trackText');
     const line = element('strong','titleLine');
     line.append(element('span','',row.title)); name.append(line);
-    const credit = row.channel && row.artist && fold(row.channel) !== fold(row.artist) ?
-      row.artist + ' · ' + row.channel : row.artist || row.channel;
+    const credit = trackCredit(row);
     if (credit) name.append(element('small','',credit));
     const cover = element('button','coverButton');
     cover.type = 'button';
@@ -94,7 +114,7 @@ function showPlaylist(playlist, id = lastId) {
     const displayed = playlist.matchingRevision===matchingRevision && (row.match || row.candidate);
     const tag = element(displayed ? 'button' : 'span','tag');
     if (displayed) {
-      const label = !row.match ? 'TJ 후보' : row.original || row.status === '원곡 반주' ? '같은 곡 TJ' : 'TJ';
+      const label = matchLabel(row);
       tag.append(element('em','',label),element('b','',displayed.number));
       tag.setAttribute('aria-label', label + ' ' + displayed.number + ' 복사');
       tag.onclick = () => copyNumber(displayed.number);
@@ -117,7 +137,49 @@ function copyNumber(number) {
   if (window.Songbook) Songbook.copyNumber(String(number));
   else navigator.clipboard.writeText(String(number));
 }
+function drawRecommendation() {
+  const pick = PlaylistReader.drawNumber(pickPool, pickHistory);
+  if (!pick) return;
+  pickHistory = pick.history;
+  if (currentId) try { localStorage.setItem(pickStorageKey(currentId), JSON.stringify(pickHistory)); } catch {}
+  const row = pickPool.get(pick.number);
+  el('pickArt').replaceChildren(picture(row));
+  el('pickTitle').firstElementChild.textContent = row.title;
+  el('pickCredit').textContent = trackCredit(row);
+  const number = el('pickNumber'), label = matchLabel(row);
+  number.firstElementChild.textContent = label;
+  number.lastElementChild.textContent = pick.number;
+  number.setAttribute('aria-label', label + ' ' + pick.number + ' 복사');
+  number.onclick = () => copyNumber(pick.number);
+  el('pickAgain').hidden = pickPool.size < 2;
+  if (!pickSheet.open) pickSheet.showModal();
+  sizeTitle(el('pickTitle'));
+  titleSizes.observe(el('pickTitle'));
+}
+el('randomSong').onclick = el('pickAgain').onclick = drawRecommendation;
+el('closePick').onclick = () => pickSheet.close();
+let swipeStart;
+pickSheet.onpointerdown = e => {
+  if (e.isPrimary && e.pointerType === 'touch') swipeStart = { id:e.pointerId, x:e.clientX, y:e.clientY };
+};
+pickSheet.onpointerup = e => {
+  if (swipeStart?.id !== e.pointerId) return;
+  const dy = e.clientY - swipeStart.y, dx = e.clientX - swipeStart.x;
+  swipeStart = undefined;
+  if (dy > 50 && dy > Math.abs(dx)) pickSheet.close();
+};
+pickSheet.onpointercancel = () => { swipeStart = undefined; };
+pickSheet.onclose = () => {
+  swipeStart = undefined;
+  if (!pickSheet.open) titleSizes.unobserve(el('pickTitle'));
+};
+pickSheet.onclick = e => {
+  if (e.target !== pickSheet) return;
+  const { top, left, right, bottom } = pickSheet.getBoundingClientRect();
+  if (e.clientY < top || e.clientY > bottom || e.clientX < left || e.clientX > right) pickSheet.close();
+};
 window.handleBack = () => {
+  if (pickSheet.open) { pickSheet.close(); return true; }
   if (el('policy').open) { el('policy').close(); return true; }
   if (el('books').open) {
     if (el('register').disabled) return true;
@@ -136,6 +198,7 @@ el('search').oninput = () => { if (current) applySearch(); };
 el('clear').onclick = () => { el('search').value = ''; applySearch(); el('search').focus(); };
 el('return').onclick = () => showPlaylist(lastPlaylist);
 function setBusy(busy) {
+  el('randomSong').disabled = busy;
   el('bookSearch').disabled = busy;
   el('more').disabled = busy;
   el('register').disabled = busy;
@@ -236,6 +299,7 @@ async function changeBook(book, remove) {
         nextList = nextId ? await readBook(next) : null;
       }
       await SongbookLibrary.remove(book.id);
+      localStorage.removeItem(pickStorageKey(book.id));
       lastId = nextId; lastPlaylist = nextList;
       savedEntries.delete(book.id);
       if (currentId === book.id) showPlaylist(lastPlaylist);
@@ -316,6 +380,7 @@ async function expireBooks() {
     const book = await SongbookLibrary.get(entry.id);
     const stub = { youtubeId:entry.youtubeId, name:'YouTube 플레이리스트 · ' + entry.youtubeId.slice(-6), customArt:customPictures(book) };
     savedEntries.set(entry.id, await SongbookLibrary.save(entry.id, stub, entry.savedAt));
+    if (book?.rows) localStorage.removeItem(pickStorageKey(entry.id));
     if (lastId === entry.id) lastPlaylist = null;
     if (currentId === entry.id) showPlaylist(null);
   }

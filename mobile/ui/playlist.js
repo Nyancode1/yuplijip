@@ -49,6 +49,29 @@ const PlaylistReader = (() => {
             { ...row.originalVideo, id:row.originalVideo.id || (typeof YouTubePlaylist!=='undefined' && YouTubePlaylist.originalVideo(row.description)) || undefined },
         availability:row.private ? 'private' : row.availability, art:artwork(row.art || row.thumbnail || row.thumbnailUrl) };
   }
-  return { parse, artwork, songInput };
+  function recommendationPool(playlist, revision) {
+    const pool = new Map();
+    if (playlist?.matchingRevision !== revision) return pool;
+    for (const row of playlist.rows || []) {
+      const number = String(row.match?.number ?? '');
+      if (/^\d{1,8}$/.test(number) && !row.private && !row.parts?.length && row.status !== '스킵' && !pool.has(number))
+        pool.set(number, row);
+    }
+    return pool;
+  }
+
+  function drawNumber(pool, history) {
+    if (!pool.size) return;
+    const seen = new Set(history.filter(number => pool.has(number)));
+    let choices = [...pool.keys()].filter(number => !seen.has(number));
+    if (!choices.length) {
+      const last = history[history.length - 1];
+      seen.clear();
+      choices = [...pool.keys()].filter(number => pool.size === 1 || number !== last);
+    }
+    const number = choices[Math.floor(Math.random() * choices.length)];
+    return { number, history: [...seen, number] };
+  }
+  return { parse, artwork, songInput, recommendationPool, drawNumber };
 })();
 if (typeof module !== 'undefined') module.exports = PlaylistReader;

@@ -10,13 +10,24 @@
 <input type="file" id="artFile" accept="image/*" hidden>
 <p id="message" role="status" aria-live="polite"></p>
 <button type="button" id="return" hidden>이전 목록으로</button>
-<section class="collection" id="collection" hidden><div class="hero-art" id="hero" aria-hidden="true"></div><div class="collectionInfo"><div class="collectionTitle"><h2 id="title">내 선곡표</h2><button type="button" id="rescan" aria-label="이 플레이리스트의 TJ 번호 재탐색" hidden>재탐색</button></div><p id="count"></p><button type="button" id="source" aria-label="YouTube에서 불러온 곡 목록으로" hidden><img src="youtube.png" alt="Developed with YouTube"></button></div></section>
+<section class="collection" id="collection" hidden><div class="hero-art" id="hero" aria-hidden="true"></div><div class="collectionInfo"><div class="collectionTitle"><h2 id="title">내 선곡표</h2><button type="button" id="rescan" aria-label="이 플레이리스트의 TJ 번호 재탐색" hidden>재탐색</button></div><p id="count"></p>
+<div class="collectionActions"><button type="button" id="randomSong" hidden aria-haspopup="dialog" aria-controls="recommendation"><span aria-hidden="true">⚄</span>랜덤 한 곡</button><button type="button" id="source" aria-label="YouTube에서 불러온 곡 목록으로" hidden><img src="youtube.png" alt="Developed with YouTube"></button></div></div></section>
 <div class="tools" id="tools" hidden><div class="input search"><input id="search" type="search" aria-label="이 목록에서 곡 검색" placeholder="곡명, 가수, TJ 번호 검색" autocomplete="off" enterkeyhint="search"><button id="clear" type="button" aria-label="검색어 지우기" hidden>×</button></div>
 <nav id="filters" aria-label="곡 상태 필터"></nav>
 </div>
 
 <section id="tracks" aria-label="곡 목록"></section>
 </main>
+<dialog id="recommendation" aria-labelledby="pickHeading">
+  <div class="sheetGrip" aria-hidden="true"></div>
+  <div class="sheetHead"><h2 id="pickHeading">랜덤 한 곡</h2><button type="button" id="closePick" aria-label="추천 닫기" autofocus>×</button></div>
+  <div class="track pickCard" aria-live="polite" aria-atomic="true">
+    <span id="pickArt" aria-hidden="true"></span>
+    <div class="trackText"><strong class="titleLine" id="pickTitle"><span></span></strong><small id="pickCredit"></small></div>
+    <button type="button" class="tag" id="pickNumber"><em></em><b></b></button>
+  </div>
+  <button type="button" id="pickAgain">다른 곡 뽑기</button>
+</dialog>
 <dialog id="books" aria-labelledby="booksTitle"><div class="libraryHead"><h2 id="booksTitle">저장된 플레이리스트</h2><button type="button" id="closeBooks" aria-label="닫기">×</button></div><form id="bookSearchForm" role="search" aria-label="저장한 플레이리스트"><div class="input"><input id="bookSearch" type="search" aria-label="플리 이름 검색" placeholder="플리 이름 검색" autocomplete="off" enterkeyhint="search"></div></form><div id="bookLinks"></div><p id="bookMessage" role="status"></p><button type="button" id="policyMenu">개인정보 처리방침 및 이용약관</button></dialog>
 <dialog id="policy" aria-labelledby="policyTitle"><h2 id="policyTitle">개인정보 처리방침</h2>
 <p>플리를 등록하면 앱이 Google의 YouTube Data API로 목록 ID와 영상 ID를 보내 제목·채널·설명·썸네일을 받습니다. 이때 Google에 접속 IP와 앱 식별 정보가 전달됩니다. TJ 번호는 기기의 곡목으로 찾습니다.</p>

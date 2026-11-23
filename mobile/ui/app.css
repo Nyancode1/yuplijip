@@ -271,6 +271,50 @@ h2 {
   font-size: 13px;
 }
 
+.collectionActions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+#randomSong, #pickAgain {
+  border: 0;
+  border-radius: 12px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 700;
+}
+#randomSong { display: inline-flex; align-items: center; gap: 7px; padding: 0 13px; background: #382925; color: #ffb0a1; }
+#randomSong span { font: 22px/1 sans-serif; }
+
+#recommendation {
+  position: fixed;
+  inset: auto 0 0;
+  margin: 0 auto;
+  width: min(100%, 480px);
+  max-width: none;
+  max-height: 90%;
+  padding: 8px 16px max(16px, env(safe-area-inset-bottom));
+  background: #242125;
+  border: 1px solid #453d42;
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  color: inherit;
+  overscroll-behavior: contain;
+}
+#recommendation::backdrop { background: #000a; }
+html:has(#recommendation[open]) { overflow: hidden; }
+.sheetGrip { width: 36px; height: 4px; margin: 0 auto; border-radius: 3px; background: #756e75; }
+.sheetHead { display: flex; align-items: center; justify-content: space-between; }
+.sheetHead h2 { font-size: 18px; letter-spacing: -.5px; }
+#closePick { min-width: 44px; min-height: 44px; font-size: 24px; background: transparent; border: 0; color: var(--muted); }
+#recommendation .pickCard { padding: 10px; background: #302c30; border: 0; border-radius: 12px; }
+.pickCard .art { width: 48px; height: 48px; }
+.pickCard .tag b { font-size: 24px; }
+#pickAgain { width: 100%; margin-top: 12px; background: var(--red); color: #261512; }
+@media (min-height: 320px) {
+  #recommendation { touch-action: pan-x pinch-zoom; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  #recommendation[open] { animation: riseSheet 180ms ease-out; }
+  @keyframes riseSheet { from { transform: translateY(100%); } to { transform: translateY(0); } }
+}
+
 .tools {
   position: sticky;
   top: 0;
