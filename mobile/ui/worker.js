@@ -28,6 +28,7 @@ self.onmessage = async event => {
         channel: song.uploader || song.channels?.[0] || '',
         art: song.art, private: song.availability === 'private', original: result.status === '원곡 반주' || Boolean(verified && song.original),
         titles:song.titles, tracks:song.tracks, artists:song.artists, description:song.description,
+        channels:song.channels, originalVideo:song.originalVideo,
         aliases: [...(song.titles || []), ...(song.artists || []), matched?.title_ko, matched?.artist_ko].filter(Boolean),
         match: matched && concise(matched), candidate: !matched && result.titleCandidate ? concise(result.titleCandidate) : undefined };
     });

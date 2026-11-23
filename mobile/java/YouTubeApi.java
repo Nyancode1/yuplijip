@@ -33,13 +33,19 @@ final class YouTubeApi {
     WebResourceResponse request(Uri request) throws IOException {
         String resource = request.getLastPathSegment();
         Uri.Builder uri = Uri.parse("https://www.googleapis.com/youtube/v3/").buildUpon()
-            .appendPath(resource).appendQueryParameter("part", "snippet");
+            .appendPath(resource).appendQueryParameter("part",
+                ("channels".equals(resource) || "videos".equals(resource)) ? "snippet,localizations" : "snippet");
         String id = request.getQueryParameter("id");
-        if ("videos".equals(resource)) {
+        if ("channels".equals(resource)) {
+            if (id == null || !id.matches("UC[A-Za-z0-9_-]{22}(,UC[A-Za-z0-9_-]{22}){0,49}"))
+                return response(400, "{\"reason\":\"invalidId\"}");
+            uri.appendQueryParameter("id", id).appendQueryParameter("hl", "ja")
+                .appendQueryParameter("fields", "items(id,snippet(title,localized/title),localizations/*/title)");
+        } else if ("videos".equals(resource)) {
             if (id == null || !id.matches("[A-Za-z0-9_-]{11}(,[A-Za-z0-9_-]{11}){0,49}"))
                 return response(400, "{\"reason\":\"invalidId\"}");
             uri.appendQueryParameter("id", id).appendQueryParameter("hl", "ja")
-                .appendQueryParameter("fields", "items(id,snippet(title,channelTitle,localized/title,description))");
+                .appendQueryParameter("fields", "items(id,snippet(title,channelId,channelTitle,localized/title,description),localizations/*/title)");
         } else {
             if (id == null || !id.matches("[A-Za-z0-9_-]{2,128}"))
                 return response(400, "{\"reason\":\"invalidId\"}");
