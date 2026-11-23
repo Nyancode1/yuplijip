@@ -45,7 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1
 
 개인 곡 목록을 PC에서 변환하려면 `npm run match -- <목록 파일>`을 실행합니다. 변환 결과는 `private/pc/data/`에 저장됩니다.
 
-전체 곡목과 외부 사전을 갱신할 때는 다음 명령을 사용합니다. 첫 번째 명령의 마지막 인수에는 JMdict-Simplified 영어 JSON 파일 경로를 지정합니다.
+일본곡 번호책과 외부 사전을 갱신할 때는 다음 명령을 사용합니다. 첫 번째 명령은 TJ 공식 검색의 국가 필터를 일본(JPN)으로 지정하고 모든 번호를 페이지 끝까지 조회합니다. 마지막 인수에는 JMdict-Simplified 영어 JSON 파일 경로를 지정합니다.
 
 작품 자료를 만들 때는 Unicode 17.0.0의 `Unihan_Readings.txt`와 `Unihan_Variants.txt`를 압축에서 꺼내 `mobile/build/`에 둡니다. [Unicode 17.0.0 Unihan 자료](https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip)
 

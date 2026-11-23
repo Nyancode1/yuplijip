@@ -1,9 +1,9 @@
 const el = id => document.getElementById(id);
 const filters = [['전체','all'],['번호 있음','available'],['번호 미확인','unknown']];
 let current, lastPlaylist, selected = 'all', entries = [], worker;
-let currentId, lastId, pendingDelete, catalogPromise, artTarget;
+let currentId, lastId, pendingDelete, artTarget;
 const savedEntries = new Map();
-const matchingRevision = 5;
+const matchingRevision = 6;
 const element = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -67,7 +67,7 @@ function showPlaylist(playlist, id = lastId) {
   el('return').hidden = !lastPlaylist || currentId === lastId;
   el('collection').hidden = !playlist;
   el('source').hidden = !playlist?.youtubeId;
-  el('rescan').hidden = !playlist?.rows?.length || id === 'catalog';
+  el('rescan').hidden = !playlist?.rows?.length;
   if (!playlist) {
     entries = []; el('hero').replaceChildren(); el('tracks').replaceChildren();
     el('tools').hidden = true;
@@ -91,7 +91,7 @@ function showPlaylist(playlist, id = lastId) {
     cover.setAttribute('aria-label', row.title + ' 썸네일 선택');
     cover.append(picture(row)); cover.onclick = () => chooseArt(row);
     song.append(cover,name);
-    const displayed = row.match || row.candidate;
+    const displayed = playlist.matchingRevision===matchingRevision && (row.match || row.candidate);
     const tag = element(displayed ? 'button' : 'span','tag');
     if (displayed) {
       const label = !row.match ? 'TJ 후보' : row.original || row.status === '원곡 반주' ? '같은 곡 TJ' : 'TJ';
@@ -102,14 +102,14 @@ function showPlaylist(playlist, id = lastId) {
       tag.textContent = row.parts?.length ? '메들리' : row.private || row.status === '스킵' ? '비공개' : '번호 미확인';
     }
     node.append(song,tag); list.append(node);
-    const numbers = displayed ? [displayed] : row.parts || [];
-    const text = [row.title, row.artist, row.channel, ...(row.aliases || []),
+    const numbers = displayed ? [displayed] : [];
+    const text = [row.title, row.artist, row.channel, ...(playlist.matchingRevision===matchingRevision ? row.aliases || [] : []),
       ...numbers.flatMap(m => [m.title, m.artist, 'TJ ' + m.number])].map(fold).join('\n');
-    return { node, line, text, available: Boolean(row.match || row.parts?.length) };
+    return { node, line, text, available: Boolean(displayed && row.match) };
   });
   const empty = element('p','empty'); empty.id = 'empty'; empty.setAttribute('role','status'); list.append(empty);
   el('tracks').replaceChildren(list);
-  el('tools').hidden = currentId === 'catalog';
+  el('tools').hidden = false;
   applySearch();
   for (const entry of entries) visibleTitles.observe(entry.line);
 }
@@ -120,7 +120,7 @@ function copyNumber(number) {
 window.handleBack = () => {
   if (el('policy').open) { el('policy').close(); return true; }
   if (el('books').open) {
-    if (el('load').disabled) return true;
+    if (el('register').disabled) return true;
     if (pendingDelete) { pendingDelete = null; drawBooks(); } else el('books').close();
     return true;
   }
@@ -136,15 +136,10 @@ el('search').oninput = () => { if (current) applySearch(); };
 el('clear').onclick = () => { el('search').value = ''; applySearch(); el('search').focus(); };
 el('return').onclick = () => showPlaylist(lastPlaylist);
 function setBusy(busy) {
-  el('load').disabled = busy;
+  el('bookSearch').disabled = busy;
   el('more').disabled = busy;
   el('register').disabled = busy;
   el('rescan').disabled = busy;
-}
-async function readJson(file) {
-  const response = await fetch(file);
-  if (!response.ok) throw Error('선곡표를 열지 못했습니다.');
-  return response.json();
 }
 function personalBooks() {
   return [...savedEntries.values()].filter(book => !book.removed).sort((a,b) => b.savedAt - a.savedAt);
@@ -199,7 +194,9 @@ function drawBooks() {
   const links = el('bookLinks');
   links.replaceChildren();
   const personal = personalBooks();
+  const terms = el('bookSearch').value.trim().split(/\s+/u).map(fold).filter(Boolean);
   for (const book of personal) {
+      if (!terms.every(term=>fold(book.name).includes(term))) continue;
       const row = element('div','bookRow'), open = element('button','bookOpen');
       drawCard(open,book);
       if (book.count==null && !YouTubePlaylist.expired(book)) SongbookLibrary.get(book.id).then(playlist=>{
@@ -223,10 +220,11 @@ function drawBooks() {
       };
       row.append(remove); links.append(row);
   }
-  if (!links.childElementCount) links.append(element('p','libraryEmpty','저장된 플레이리스트가 없습니다.'));
+  if (!links.childElementCount) links.append(element('p','libraryEmpty',personal.length ?
+    '일치하는 플레이리스트가 없습니다.' : '저장된 플레이리스트가 없습니다.'));
 }
 async function changeBook(book, remove) {
-  if (el('load').disabled) return;
+  if (el('register').disabled) return;
   setBusy(true); el('bookMessage').textContent = '';
   try {
     if (remove) {
@@ -253,7 +251,7 @@ async function changeBook(book, remove) {
   finally { setBusy(false); }
 }
 el('more').onclick = () => {
-  pendingDelete = null; el('bookMessage').textContent = '';
+  pendingDelete = null; el('bookMessage').textContent = ''; el('bookSearch').value = '';
   drawBooks(); el('books').showModal();
 };
 el('closeBooks').onclick = () => el('books').close();
@@ -270,29 +268,8 @@ function match(rows) {
     worker.postMessage({ rows });
   });
 }
-el('form').onsubmit = async e => {
-  e.preventDefault();
-  if (el('load').disabled) return;
-  const terms = el('catalogQuery').value.trim().split(/\s+/u).map(fold).filter(Boolean);
-  if (!terms.length) return;
-  el('books').close();
-  setBusy(true); el('catalogQuery').blur(); el('message').textContent = '';
-  try {
-    catalogPromise ||= readJson('catalog.json').catch(error => { catalogPromise = null; throw error; });
-    const songs = await catalogPromise;
-    const found = songs.filter(s => {
-      const text = [s.karaoke_numbers.tj,s.title_primary,s.title_ruby,s.title_ko,s.artist_primary,s.artist_ko,...(s.artist_aliases || [])].map(fold).join('\n');
-      return terms.every(term => text.includes(term));
-    });
-    const rows = found.slice(0,100).map(s => ({ title: s.title_primary, artist: s.artist_primary,
-      match: { number: s.karaoke_numbers.tj, title: s.title_primary, artist: s.artist_primary } }));
-    await Promise.all(rows.map(async row => { row.art = await SongbookLibrary.art(row.match.number).catch(() => undefined); }));
-    showPlaylist({ name:'검색 결과', rows }, 'catalog');
-    if (!found.length) el('empty').textContent = '검색 결과가 없습니다.';
-    if (found.length > rows.length) el('message').textContent = found.length + '곡 중 처음 100곡입니다. 검색어를 더 입력해 주세요.';
-  } catch { el('message').textContent = '곡목을 읽지 못했습니다.'; }
-  finally { setBusy(false); }
-};
+el('bookSearch').oninput = () => { pendingDelete=null; drawBooks(); };
+el('bookSearchForm').onsubmit = e => { e.preventDefault(); el('bookSearch').blur(); };
 el('policyFirst').onclick = el('policyMenu').onclick = () => el('policy').showModal();
 el('closePolicy').onclick = () => el('policy').close();
 el('source').onclick = () => el('tracks').scrollIntoView();
@@ -344,7 +321,7 @@ async function expireBooks() {
   }
 }
 document.addEventListener('visibilitychange', async () => {
-  if (document.hidden || el('load').disabled) return;
+  if (document.hidden || el('register').disabled) return;
   setBusy(true);
   try { await expireBooks(); if (el('books').open) drawBooks(); }
   finally { setBusy(false); }
@@ -366,16 +343,10 @@ el('artFile').onchange = async e => {
     canvas.getContext('2d').drawImage(bitmap,(bitmap.width-size)/2,(bitmap.height-size)/2,size,size,0,0,240,240);
     bitmap.close();
     const art = canvas.toDataURL('image/jpeg', .86);
-    if (target.id === 'catalog') await SongbookLibrary.setArt(target.row.match.number, art);
-    else {
-      const updated = { ...target.playlist, rows:target.playlist.rows.map(r=>r===target.row ? {...r,art} : r) };
-      savedEntries.set(target.id, await SongbookLibrary.save(target.id, updated));
-      if (lastId === target.id) lastPlaylist = updated;
-      if (currentId === target.id) showPlaylist(updated, target.id);
-      return;
-    }
-    target.row.art = art;
-    if (currentId === target.id) showPlaylist(target.playlist, target.id);
+    const updated = { ...target.playlist, rows:target.playlist.rows.map(r=>r===target.row ? {...r,art} : r) };
+    savedEntries.set(target.id, await SongbookLibrary.save(target.id, updated));
+    if (lastId === target.id) lastPlaylist = updated;
+    if (currentId === target.id) showPlaylist(updated, target.id);
   } catch { el('message').textContent = '선택한 이미지를 저장하지 못했습니다.'; }
   finally { setBusy(false); }
 };

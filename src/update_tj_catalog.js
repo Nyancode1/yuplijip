@@ -60,7 +60,7 @@ async function searchNumbers(prefix, nation, wanted) {
     seenPages.add(signature);
     for (const [i, number] of numbers.entries()) {
       if (!/^\d+$/.test(number)) throw new Error('TJ 검색 결과 번호 누락 ' + query);
-      if (!wanted.has(number)) continue;
+      if (wanted ? !wanted.has(number) : !number.startsWith(prefix)) continue;
       const chunk = chunks[i];
       const title = chunk.match(/class="grid-item title3"[\s\S]*?<p class=""><span>([\s\S]*?)<\/p>/)?.[1];
       const artist = chunk.match(/class="grid-item title4 singer"><p>([\s\S]*?)<\/p>/)?.[1];

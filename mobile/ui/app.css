@@ -57,8 +57,7 @@ html:has(#books[open]) { overflow: hidden; }
   gap: 6px;
   padding: 4px 0;
 }
-#books #form { margin: 12px 0; }
-#books #form input { width: 0; }
+#bookSearchForm { margin: 12px 0; }
 
 @media (prefers-reduced-motion: no-preference) {
   #books {
@@ -209,7 +208,7 @@ button {
   cursor: pointer;
 }
 
-#register, #books #load {
+#register {
   background: #ff665d;
   color: #201312;
   border: 0;

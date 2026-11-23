@@ -1,15 +1,14 @@
 const japanese=require('../data/tj_catalog.json').songs;
 const releases=require('../data/tj_releases.json');
+const {key}=require('./matching');
 
 function catalog() {
-  const rows=new Map(japanese.map(row=>[row.karaoke_numbers.tj,{...row}]));
-  for (const [number,title,artist,composer] of releases) {
-    const row=rows.get(number);
-    if (row) {
-      if (row.artist_primary.normalize('NFKC').replace(/\s+/g,'')===artist.normalize('NFKC').replace(/\s+/g,''))
-        row.composer=composer;
-    } else rows.set(number,{karaoke_numbers:{tj:number},title_primary:title,artist_primary:artist,composer,supplement:true});
-  }
-  return [...rows.values()];
+  if (releases.country!=='JPN') throw Error('TJ 일본곡 번호책이 필요합니다.');
+  const readings=new Map(japanese.map(row=>[row.karaoke_numbers.tj,row]));
+  return releases.songs.map(([number,title,artist,composer])=>{
+    const old=readings.get(number);
+    const same=old && key(old.title_primary)===key(title) && key(old.artist_primary)===key(artist);
+    return {...(same ? old : {}), karaoke_numbers:{tj:number},title_primary:title,artist_primary:artist,composer};
+  });
 }
 module.exports=catalog;
