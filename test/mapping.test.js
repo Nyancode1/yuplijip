@@ -68,6 +68,14 @@ test('등록된 원곡·커버 영상과 본가 표기를 검증하고 크레딧
   assert.equal(run({title:'Silver Skyline',artists:['Singer A']}).row,songs[0]);
   assert.equal(run({title:'Silver Skyline',artists:['Somebody Else']}).row,undefined);
   assert.equal(run({title:'메들리',id:'aaaaaaaaaaa'}).row,undefined);
+  const saved={id:'aaaaaaaaaaa',title:'銀の夜',artists:['Singer A']};
+  for (const label of ['원본 다시보기 출처','일러스트','출처','Original choreography']) {
+    const description=label+': https://youtu.be/aaaaaaaaaaa';
+    assert.equal(youtube.originalVideo(description),undefined);
+    assert.equal(run({title:'오늘의 방송',description,originalVideo:saved}).row,undefined);
+    assert.equal(youtube.originalVideo(description+'\n원곡: https://youtu.be/bbbbbbbbbbb'),'bbbbbbbbbbb');
+    assert.equal(run({title:'무대',description:description+'\n원곡: https://youtu.be/aaaaaaaaaaa',originalVideo:saved}).row,songs[0]);
+  }
 });
 
 test('사람이 부른 합창판도 같은 작품으로 확인되면 보컬로이드 TJ 번호를 사용한다', () => {
@@ -86,11 +94,52 @@ test('커버에 쓰인 보컬로이드 원제와 번역명을 확인하고 동�
     vocaloid:true,distinctTitles:['푸른 하늘 편지','青空の手紙']};
   const cover={title:'사람 가수 - 푸른 하늘 편지 [한글자막]'};
   const idx=indexCatalog([song],read,{works:[work]});
-  assert.equal(selectSong(cover,idx,read).row,song);
+  const titleOnly = selectSong(cover,idx,read);
+  assert.equal(titleOnly.row,undefined);
+  assert.equal(titleOnly.titleCandidate,song);
+  assert.equal(selectSong({...cover,title:'사람 가수 〈푸른 하늘 편지〉 (青空の手紙)'},idx,read).row,song);
   assert.equal(selectSong({title:'푸른 하늘 편지를 좋아해요'},idx,read).row,undefined);
   assert.equal(selectSong({...cover,title:cover.title+' 메들리'},idx,read).row,undefined);
   const sameName=indexCatalog([song,row('32','푸른 하늘 편지','다른 가수',{supplement:true})],read,{works:[work]});
   assert.equal(selectSong(cover,sameName,read).row,undefined);
+});
+
+test('한국어 원곡 크레딧은 줄바꿈, 괄호, 구분선과 기재 순서에 관계없이 같은 곡을 식별한다', () => {
+  const song=row('31','青空の手紙','Producer');
+  const other=row('32','青空の手紙','Another artist');
+  const idx=indexCatalog([song,other],read);
+  for (const description of ['곡명: 青空の手紙\n원곡 가수: Producer',
+    '원곡 가수：Producer │ 노래 제목：〈青空の手紙〉','[곡 제목] 青空の手紙\n[원곡자] Producer']) {
+    assert.equal(selectSong({title:'오늘의 공연',description},idx,read).row,song);
+  }
+  for(const description of ['노래 제목: 青空の手紙\n보컬: Producer','곡명: 青空の手紙\n곡명: 다른 노래\n원곡 가수: Producer']) {
+    assert.equal(selectSong({title:'오늘의 공연',description},idx,read).row,undefined);
+  }
+});
+
+test('오리지널 작곡자 표기와 충돌하면 동명 한국어 자작곡에 번호를 붙이지 않는다', () => {
+  const song=row('31','青空の手紙','First singer',{composer:'Composer'});
+  const works=[{number:'31',titles:['푸른 하늘 편지','青空の手紙'],artists:['Composer','First singer'],ids:['Youtube:aaaaaaaaaaa'],
+    vocaloid:true,distinctTitles:['푸른 하늘 편지','青空の手紙']}];
+  const idx=indexCatalog([song],read,{works});
+  for(const description of ['원곡자: 다른 사람','작사·작곡: 다른 사람','작곡: Composer & 다른 사람']) {
+    for(const id of [undefined,'aaaaaaaaaaa']) {
+      const hit=selectSong({title:'다른 사람 - 푸른 하늘 편지 [한글자막]',id,description},idx,read);
+      assert.equal(hit.row,undefined);
+      assert.equal(hit.titleCandidate,undefined);
+    }
+  }
+  assert.equal(selectSong({title:'무대 커버',id:'aaaaaaaaaaa',description:'작곡: Composer'},idx,read).row,song);
+});
+
+test('두 글자 한국어 별칭도 유일한 기존 후보와 일치하면 후보로만 표시한다', () => {
+  const song=row('31','青空の手紙','Producer');
+  const work={number:'31',artists:['Producer'],titles:['편지'],ids:[],vocaloid:true,distinctTitles:['편지']};
+  const idx=indexCatalog([song],read,{works:[work]});
+  const result=selectSong({title:'공연자-편지(자막 있음)'},idx,read);
+  assert.equal(result.row,undefined);
+  assert.equal(result.titleCandidate,song);
+  assert.equal(selectSong({title:'공연자-편지쓰기(자막 있음)'},idx,read).titleCandidate,undefined);
 });
 
 test('다른 언어로 적힌 앨범명과 두 작곡자가 일치해도 트랙명은 후보로만 표시한다', () => {
@@ -130,7 +179,9 @@ test('보컬로이드 한자 제목은 해당 작품에 확인된 한국 독음�
   const original=row('6','異口同音','Producer');
   const work={number:'6',titles:['異口同音'],artists:['Producer'],ids:[],vocaloid:true,distinctTitles:['異口同音'],koreanReadings:['이구동음']};
   const idx=indexCatalog([original],read,{works:[work]});
-  assert.equal(selectSong({title:'가수 - 이구동음 [자막]'},idx,read).row,original);
+  const result=selectSong({title:'가수 - 이구동음 [자막]'},idx,read);
+  assert.equal(result.row,undefined);
+  assert.equal(result.titleCandidate,original);
   assert.equal(selectSong({title:'가수 - 이구동성 [자막]'},idx,read).row,undefined);
 });
 

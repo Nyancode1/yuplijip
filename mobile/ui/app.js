@@ -3,7 +3,7 @@ const filters = [['전체','all'],['번호 있음','available'],['번호 미확�
 let current, lastPlaylist, selected = 'all', entries = [], worker;
 let currentId, lastId, pendingDelete, catalogPromise, artTarget;
 const savedEntries = new Map();
-const matchingRevision = 4;
+const matchingRevision = 5;
 const element = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;

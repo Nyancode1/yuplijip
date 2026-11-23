@@ -1,4 +1,4 @@
-importScripts('lib/wanakana.js', 'lib/kuromoji.js', 'lib/matching.js');
+importScripts('lib/wanakana.js', 'lib/kuromoji.js', 'youtube.js', 'lib/matching.js');
 let ready;
 async function prepare() {
   const [songs, tokenizer, loanwords, works] = await Promise.all([

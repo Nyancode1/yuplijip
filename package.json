@@ -1,6 +1,6 @@
 {
   "name": "yuplijip",
-  "version": "1.5.4",
+  "version": "1.5.5",
   "private": true,
   "scripts": {
     "match": "node src/tj_search.js",

@@ -24,12 +24,16 @@ const YouTubePlaylist = (() => {
     if (res.status === 403 || data.reason === 'keyMissing') throw Error('앱의 YouTube API 연결 설정을 확인해야 합니다.');
     throw Error('YouTube에서 목록을 받지 못했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.');
   }
-  function originalVideo(description) {
+  function unverifiedSourceCredit(text) {
+    return /^[^\p{L}\p{N}\r\n]*(?:출처[ \t]*[:：-]|(?:(?:원곡|원본|original)[ \t]*(?:영상[ \t]*)?)?(?:방송[ \t]*다시보기|다시보기|풀[ \t]*방송|일러스트|안무|그림[ \t]*출처|illustration\b|choreography\b|stream[ \t]*archive\b|livestream\b))/imu.test(text || '');
+  }
+  function sourceVideoIds(description, otherMedia = false) {
     const lines = (description || '').split(/\r?\n/);
     const ids = new Set();
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!/^[^\p{L}\p{N}]*(?:original(?:\s+(?:song|music|work|video))?\b|원곡(?:자|\s*영상)?|원본(?:\s*영상)?(?:은|는)?|(?:음원\s*)?출처(?=\s*[:：])|(?:ご|御)?本家(?:様)?|原曲)(?=[^\p{L}\p{N}]|$)/iu.test(line)) continue;
+      if (unverifiedSourceCredit(line) !== otherMedia) continue;
+      if (!otherMedia && !/^[^\p{L}\p{N}]*(?:original(?:\s+(?:song|music|work|video))?\b|원곡(?:자|\s*영상)?|원본(?:\s*영상)?(?:은|는)?|(?:음원\s*)?출처(?=\s*[:：])|(?:ご|御)?本家(?:様)?|原曲)(?=[^\p{L}\p{N}]|$)/iu.test(line)) continue;
       let block = line;
       // 크레딧 아래의 URL 줄만 읽어 다음 가수나 홍보 링크를 섞지 않는다.
       for (let j=i+1;j<Math.min(i+5,lines.length);j++) {
@@ -49,7 +53,19 @@ const YouTubePlaylist = (() => {
         if (/^[\w-]{11}$/.test(id)) ids.add(id);
       }
     }
+    return ids;
+  }
+  function originalVideo(description) {
+    const ids = sourceVideoIds(description);
     return ids.size === 1 ? [...ids][0] : undefined;
+  }
+  function withVerifiedSource(input) {
+    if (!input.originalVideo || !unverifiedSourceCredit(input.description)) return input;
+    const others = sourceVideoIds(input.description, true);
+    const id = input.originalVideo.id;
+    if (others.size && (!id || others.has(id)) && !sourceVideoIds(input.description).has(id))
+      return {...input, originalVideo:undefined};
+    return input;
   }
   const titlesOf = item => [...new Set([item?.snippet?.title, item?.snippet?.localized?.title,
     item?.localizations?.ja?.title, item?.localizations?.ko?.title].filter(Boolean))];
@@ -116,6 +132,6 @@ const YouTubePlaylist = (() => {
   function expired(entry, now = Date.now()) {
     return Boolean(entry.youtubeId && (!entry.fetchedAt || now - entry.fetchedAt >= lifetime));
   }
-  return { playlistId, load, expired, originalVideo, refreshOriginals };
+  return { playlistId, load, expired, originalVideo, unverifiedSourceCredit, withVerifiedSource, refreshOriginals };
 })();
 if (typeof module !== 'undefined') module.exports = YouTubePlaylist;
