@@ -3,6 +3,46 @@ const assert = require('node:assert/strict');
 const { createReader, indexCatalog, selectSong, addSavedAliases } = require('../src/tj_search');
 const { mergeLocales } = require('../src/playlist');
 const mobilePlaylist = require('../mobile/ui/playlist');
+const youtube = require('../mobile/ui/youtube');
+
+test('공유 링크의 목록 ID만 사용하고 외부 호스트 및 영상 단독 링크는 거절한다', () => {
+  assert.equal(youtube.playlistId('https://music.youtube.com/playlist?list=PL_example&si=tracking'), 'PL_example');
+  assert.equal(youtube.playlistId('https://youtu.be/aaaaaaaaaaa?list=PL_example'), 'PL_example');
+  for (const link of ['https://youtube.com.example.org/playlist?list=PL_ok','https://www.youtube.com/watch?v=abcdefghijk','http://music.youtube.com/?list=PL_ok'])
+    assert.throws(() => youtube.playlistId(link));
+});
+
+test('공식 응답을 페이지 끝까지 읽고 영상 ID로 원제와 설명을 연결하며 중복과 비공개 자리를 보존한다', async () => {
+  const a = 'a'.repeat(11), b = 'b'.repeat(11), missing = 'c'.repeat(11), calls = [];
+  const item = id => ({snippet:{title:id, resourceId:{videoId:id}, videoOwnerChannelTitle:'채널'}});
+  const get = async (resource, id, page) => {
+    calls.push([resource, id, page]);
+    if (resource === 'playlists') return {items:[{snippet:{title:'내 플리'}}]};
+    if (resource === 'videos') return {items:id.split(',').filter(i => i !== missing).reverse().map(i => ({
+      id:i, snippet:{title:i, localized:{title:'원제 ' + i}, description:'원곡 설명'},
+    }))};
+    return page ? {items:[item(a), item(missing)]} : {items:[item(a),item(b)], nextPageToken:'p2'};
+  };
+  const book = await youtube.load('PL_test', get);
+  assert.deepEqual(book.rows.map(r => r.id), [a,b,a,missing]);
+  assert.equal(book.rows[0].titles[1], '원제 ' + a);
+  assert.equal(book.rows[0].description, '원곡 설명');
+  assert.equal(book.rows[3].availability, 'private');
+  assert.equal(calls.filter(r => r[0] === 'playlistItems').length, 2);
+  assert.equal(youtube.expired(book, book.fetchedAt + 29 * 86400000), false);
+  assert.equal(youtube.expired(book, book.fetchedAt + 30 * 86400000), true);
+  await assert.rejects(youtube.load('PL_test', (r, id, page) => {
+    if (page) throw Error('quotaExceeded');
+    return get(r, id, page);
+  }), /quotaExceeded/);
+});
+
+test('한국어 커버의 설명에 원제만 있으면 일본어 제목을 검색하되 원곡 가수까지 확정하지 않는다', () => {
+  const songs = [row('73','星の手紙','虹')];
+  const result = match({title:'별의 편지 커버', description:'원제: 星の手紙'}, songs);
+  assert.equal(result.row, undefined);
+  assert.equal(result.titleCandidate?.karaoke_numbers.tj, '73');
+});
 
 let read;
 before(async () => { read = await createReader(); });
@@ -106,6 +146,20 @@ test('일반 영상은 가수와 일치하는 구분자 양쪽 및 인용 제목
   for (const title of ['Band - One / Two [MV]', 'One / Two / Band', 'Band「One / Two」Official Music Video']) {
     assert.equal(match({ title, uploader: 'Band Official Channel' }, rows).row?.karaoke_numbers.tj, '11');
   }
+});
+
+test('한국어 설명과 기호 사이에 적힌 원제·가수는 한 쌍으로 대조한다', () => {
+  const songs = [row('12', '風の音', 'Band'), row('13', '風の音', 'Other')];
+  for (const title of ['Band - 바람 소리（風の音）｜ 가수 Cover', '바람 소리【風の音】 – Band / 가수 cover',
+    '바람 소리 [風の音ㅣBand] / 가수 커버']) {
+    assert.equal(match({ title }, songs).row?.karaoke_numbers.tj, '12');
+  }
+  assert.equal(match({ title:'바람 소리 Cover', description:'Original：Band「風の音」' }, songs).row?.karaoke_numbers.tj, '12');
+  assert.equal(match({ title:'바람 소리 Cover', description:'가사: Band「風の音」' }, songs).row, undefined);
+  const text = { title:'바람 소리(風の音) | 가수 Cover' };
+  assert.equal(match(text, songs).titleCandidate, undefined);
+  assert.equal(match(text, songs.slice(0,1)).row, undefined);
+  assert.equal(match(text, songs.slice(0,1)).titleCandidate?.karaoke_numbers.tj, '12');
 });
 
 test('명시된 버전이 다르거나 같은 근거로 번호가 둘이면 확인 대상으로 둔다', () => {

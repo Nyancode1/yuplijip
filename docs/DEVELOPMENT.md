@@ -25,9 +25,13 @@ npm.cmd test
 powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1
 ```
 
-`dist/유플리집.apk`와 `dist/유플리집.zip`이 만들어집니다. 개발 빌드는 로컬 키로 서명합니다. 공식 배포 빌드는 기존 설치본과 같은 서명 키를 사용하고 인증서 지문을 검사합니다.
+키가 설정되면 `dist/유플리집.apk`가 만들어집니다. API 키 없이 화면을 테스트하는 개발 빌드는 `mobile/build/유플리집-dev.apk`에 저장합니다. 로컬 ZIP도 필요할 때만 `-Zip`을 추가합니다. 공식 배포 빌드는 기존 설치본과 같은 서명 키를 사용하고 인증서 지문을 검사합니다.
 
 ## 정식 릴리스
+
+공개 플레이리스트 등록에는 Google Cloud 프로젝트에서 발급한 YouTube Data API v3 키를 사용합니다. 앱이 Google에 직접 요청하므로 별도 서버 배포가 필요하지 않습니다. Android 제한에 패키지 `app.songbook.tj`와 서명 인증서 SHA-1 `A7:14:95:DE:9C:A0:98:95:1B:FC:EB:85:82:DF:B4:FE:25:18:71:07`을 등록하고 API 제한을 YouTube Data API v3로 지정합니다. 개발 빌드를 다른 키로 서명하면 해당 서명용 개발 API 키를 사용합니다.
+
+빌드에서는 환경 변수 `YUPLIJIP_YOUTUBE_API_KEY` 또는 Git에서 제외한 `private/youtube-api-key.txt`의 키를 읽습니다. 배포용 APK에는 이 값이 포함됩니다. 빌드할 때 키가 없으면 정식 릴리스를 중단합니다. 구글이 일일 한도를 거절하면 새 목록이나 갱신 요청에 오류를 표시하고 저장 중이던 일부 페이지만으로 기존 목록을 덮어쓰지 않습니다.
 
 1. `mobile/AndroidManifest.xml`에서 버전 이름과 버전 코드를 올립니다. 같은 버전 표기를 쓰도록 `package.json`과 잠금 파일도 갱신합니다.
 2. 기존 서명 키가 있는 PC에서 `powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1 -Release`를 실행합니다.

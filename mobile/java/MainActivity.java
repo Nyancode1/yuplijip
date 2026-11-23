@@ -17,12 +17,14 @@ public class MainActivity extends Activity {
     private WebView view;
     private AppUpdates updates;
     private ThumbnailStore thumbnails;
+    private YouTubeApi youtube;
     private static final int PICK_FILE = 41;
     private ValueCallback<Uri[]> fileResult;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         thumbnails = new ThumbnailStore(getFilesDir());
+        youtube = new YouTubeApi(this);
         getWindow().setStatusBarColor(0xff121214);
         getWindow().setNavigationBarColor(0xff121214);
         view = new WebView(this);
@@ -43,6 +45,13 @@ public class MainActivity extends Activity {
         }, "Songbook");
         view.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                String address = req.getUrl().toString();
+                if (req.isForMainFrame() && req.hasGesture() && (
+                    address.equals("https://www.youtube.com/t/terms") || address.equals("https://policies.google.com/privacy") ||
+                    address.equals("https://github.com/Nyancode1/yuplijip/issues"))) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW, req.getUrl())); }
+                    catch (ActivityNotFoundException ignored) {}
+                }
                 return true;
             }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest req) {
@@ -52,6 +61,7 @@ public class MainActivity extends Activity {
                         new ByteArrayInputStream(new byte[0]));
                 }
                 try {
+                    if (u.getPath().startsWith("/youtube/") && "GET".equals(req.getMethod())) return youtube.request(u);
                     if ("/thumbnail".equals(u.getPath())) return thumbnails.open(u.getQueryParameter("url"));
                     String name = u.getPath().substring(1);
                     if (name.contains("..") || name.isEmpty()) throw new IOException("잘못된 경로");

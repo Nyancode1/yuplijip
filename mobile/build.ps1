@@ -3,7 +3,8 @@ param(
     [string]$JdkPath = $env:JAVA_HOME,
     [string]$BuildTools = '35.0.0',
     [string]$UpdateRepository = '',
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Zip
 )
 $ErrorActionPreference = 'Stop'
 if (!$SdkPath) { $SdkPath = Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
@@ -17,10 +18,17 @@ $compiled = Join-Path $stage ('compile-' + [Guid]::NewGuid().ToString('N'))
 $packageDir = Join-Path $compiled 'release-package'
 $dist = Join-Path (Split-Path $PSScriptRoot) 'dist'
 $keystore = Join-Path $env:USERPROFILE '.android\debug.keystore'
+$youtubeKey = $env:YUPLIJIP_YOUTUBE_API_KEY
+$localKey = Join-Path (Split-Path $PSScriptRoot) 'private\youtube-api-key.txt'
+if (!$youtubeKey -and (Test-Path -LiteralPath $localKey)) { $youtubeKey = [IO.File]::ReadAllText($localKey).Trim() }
+if ($youtubeKey -and $youtubeKey -cnotmatch '^AIza[A-Za-z0-9_-]{35}$') { throw 'Invalid YouTube Data API key format.' }
+if ($Release -and !$youtubeKey) { throw 'Set YUPLIJIP_YOUTUBE_API_KEY or private/youtube-api-key.txt before publishing.' }
 foreach ($dir in @('classes', 'dex')) {
     New-Item -Force -ItemType Directory (Join-Path $compiled $dir) | Out-Null
 }
 New-Item -Force -ItemType Directory $dist | Out-Null
+$keyClass = Join-Path $compiled 'YouTubeConfig.java'
+[IO.File]::WriteAllText($keyClass, ('package app.songbook.tj; final class YouTubeConfig { static final String KEY = "' + $youtubeKey + '"; }'))
 function Run-Tool([string]$exe, [string[]]$arguments) {
     & $exe @arguments
     if ($LASTEXITCODE -ne 0) { throw "$exe exited with $LASTEXITCODE" }
@@ -33,11 +41,11 @@ Run-Tool "$toolsPath\aapt2.exe" @('compile', '--dir', "$PSScriptRoot\res", '-o',
 Run-Tool "$toolsPath\aapt2.exe" @('link', '-o', "$stage\base.apk", '-I', $androidJar, '--manifest',
     "$PSScriptRoot\AndroidManifest.xml", "$stage\resources.zip")
 Run-Tool "$JdkPath\bin\javac.exe" @('-encoding','UTF-8','-source','8','-target','8','-classpath',$androidJar,
-    '-d',"$compiled\classes","$PSScriptRoot\java\MainActivity.java","$PSScriptRoot\java\AppUpdates.java","$PSScriptRoot\java\UpdateFile.java","$PSScriptRoot\java\ThumbnailStore.java")
+    '-d',"$compiled\classes","$PSScriptRoot\java\MainActivity.java","$PSScriptRoot\java\AppUpdates.java","$PSScriptRoot\java\UpdateFile.java","$PSScriptRoot\java\ThumbnailStore.java","$PSScriptRoot\java\YouTubeApi.java",$keyClass)
 Run-Tool "$JdkPath\bin\jar.exe" @('cf',"$compiled\classes.jar",'-C',"$compiled\classes",'.')
 Run-Tool "$toolsPath\d8.bat" @('--min-api','28','--lib',$androidJar,'--output',"$compiled\dex","$compiled\classes.jar")
 $archiveArgs = @('uf',"$stage\base.apk",'-C',"$compiled\dex",'classes.dex')
-foreach ($asset in @('index.html','app.js','app.css','playlist.js','library.js','worker.js','catalog.json','update-repository.txt','dict','lib/kuromoji.js','lib/wanakana.js','lib/matching.js','licenses/wanakana.txt','licenses/kuromoji.txt','licenses/kuromoji-notice.txt','licenses/async.txt','licenses/doublearray.txt','licenses/lodash.txt','licenses/zlibjs.txt','licenses/alfex-source.txt','licenses/NOTICES.md')) {
+foreach ($asset in @('index.html','app.js','app.css','playlist.js','youtube.js','youtube.png','library.js','worker.js','catalog.json','update-repository.txt','dict','lib/kuromoji.js','lib/wanakana.js','lib/matching.js','licenses/wanakana.txt','licenses/kuromoji.txt','licenses/kuromoji-notice.txt','licenses/async.txt','licenses/doublearray.txt','licenses/lodash.txt','licenses/zlibjs.txt','licenses/alfex-source.txt','licenses/NOTICES.md')) {
     $archiveArgs += @('-C',$packageDir,"assets/$asset")
 }
 Run-Tool "$JdkPath\bin\jar.exe" $archiveArgs
@@ -60,8 +68,11 @@ if ($Release -and
 $manifest = [xml](Get-Content -Raw -Encoding UTF8 -LiteralPath "$PSScriptRoot\AndroidManifest.xml")
 $appLabel = $manifest.manifest.application.GetAttribute('label', 'http://schemas.android.com/apk/res/android')
 $outputApk = Join-Path $dist ($appLabel + '.apk')
+if (!$youtubeKey) { $outputApk = Join-Path $stage ($appLabel + '-dev.apk') }
 $outputZip = Join-Path $dist ($appLabel + '.zip')
 Copy-Item -LiteralPath "$stage\signed.apk" -Destination $outputApk -Force
-Compress-Archive -LiteralPath $outputApk -DestinationPath $outputZip -Force
 Write-Output $outputApk
-Write-Output $outputZip
+if ($Zip) {
+    Compress-Archive -LiteralPath $outputApk -DestinationPath $outputZip -Force
+    Write-Output $outputZip
+}

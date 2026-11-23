@@ -82,6 +82,15 @@ function videoEvidence(input) {
   const names = [...titles];
   for (const raw of titles) {
     const title = raw.normalize('NFKC');
+    // 혼합 언어 제목에서는 괄호 속 원제도 후보로 보존한다.
+    if (/[가-힣]/u.test(title)) {
+      for (const group of title.matchAll(brackets)) {
+        const inside = group.slice(1).find(Boolean).trim();
+        for (const part of inside.split(creditSeparator)) if (japanese.test(part)) names.push(part.trim());
+      }
+      const last = title.match(/[)】\]」』]\s*([\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}ー・]+)$/u);
+      if (last) names.push(last[1]);
+    }
     if (cover) {
       // 「곡 (번역) / 원곡 가수」 | Cover by ... 또는 곡 / 원곡 가수 (Covered by ...)
       const credit = title.match(/[「『]([^」』]+?)\s+\/\s+([^/「」『』]+)[」』]\s*[|│｜]?\s*cover\b/i)
@@ -133,22 +142,67 @@ function indexCatalog(songs, reading) {
   return byTitle;
 }
 
-function bracketedCoverMatch(titles, index) {
+// 일본어 원제와 원곡자 크레딧을 한 구절 안에서 대조한다.
+const brackets = /\[([^\[\]()]+)\]|\(([^()]+)\)|【([^【】]+)】|「([^「」]+)」|『([^『』]+)』|〈([^〈〉]+)〉|《([^《》]+)》/gu;
+const creditSeparator = /\s*[/|│┃]\s*|\s+[-–—]\s+/u;
+function printedTitles(text) {
+  const names = [text.trim()];
+  for (const group of text.matchAll(brackets)) {
+    const inside = group.slice(1).find(Boolean).trim();
+    const outside = text.replace(group[0], '').trim();
+    if (japanese.test(inside) && /[가-힣]/u.test(outside)) names.push(inside);
+    if (/[가-힣]/u.test(inside) && japanese.test(outside)) names.push(outside);
+  }
+  return unique(names);
+}
+
+function explicitOriginals(input) {
+  const lines = String(input.description || '').split(/\r?\n/u).map(s => s.trim());
+  const originals = [], titles = [], artists = [];
+  for (const line of lines) {
+    const credit = line.match(/^(?:[•＊*▷▶#☆\s]*)?(원곡(?:명|자)?|원제|원곡\s*가수|원곡\s*제목|原曲|本家|original(?:\s+(?:song|artist|title))?)\s*[:：]\s*(.{1,220})$/iu);
+    if (!credit || /https?:\/\//iu.test(credit[2])) continue;
+    if (/원곡자|가수|artist/iu.test(credit[1])) artists.push(credit[2]);
+    else {
+      originals.push(credit[2]);
+      if (!creditSeparator.test(credit[2])) titles.push(credit[2]);
+    }
+  }
+  if (titles.length === 1 && artists.length === 1) originals.push(titles[0] + ' / ' + artists[0]);
+  return originals;
+}
+
+function bracketedCoverMatch(titles, index, descriptionCredits) {
   const matches = new Map();
-  for (const title of titles) {
-    if (!/\bcover(?:ed)?\b|커버|歌ってみた/i.test(title)) continue;
-    for (const group of title.normalize('NFKC').matchAll(/\[([^\[\]()]+)\]|\(([^\[\]()]+)\)|【([^【】]+)】|「([^「」]+)」|『([^『』]+)』/gu)) {
-      const pair = group.slice(1).find(Boolean).split(/\s*[/│|ㅣ]\s*|\s+[-–—]\s+/u);
-      if (pair.length !== 2 || pair.some(x => !x.trim())) continue;
-      for (const [name, artist] of [pair, [pair[1], pair[0]]]) {
-        const artistKey = key(artist.trim());
-        for (const [record, strength] of index.get(key(name.trim())) || []) {
-          if (strength === 3 && !record.version && record.artistKeys.has(artistKey)) {
-            matches.set(record.row.karaoke_numbers.tj, record.row);
-          }
+  const pair = (name, artist) => {
+    for (const candidate of printedTitles(name)) {
+      for (const [record, strength] of index.get(key(candidate)) || []) {
+        if (strength === 3 && !record.version && record.artistKeys.has(key(artist))) {
+          matches.set(record.row.karaoke_numbers.tj, record.row);
         }
       }
     }
+  };
+  function inspect(text) {
+    const parts = text.split(creditSeparator).map(s => s.trim());
+    if (parts.length === 2 && parts.every(Boolean)) {
+      pair(parts[0], parts[1]); pair(parts[1], parts[0]);
+    }
+  }
+  for (const raw of [...titles, ...descriptionCredits]) {
+    const text = raw.replace(/[ㅣᅵ]/g, '|').normalize('NFKC');
+    const isCover = /\bcover(?:ed)?\b|커버|歌ってみた/i.test(text);
+    if (!isCover && !descriptionCredits.includes(raw) && !/[가-힣]/u.test(text)) continue;
+    for (const group of text.matchAll(brackets)) inspect(group.slice(1).find(Boolean));
+    // 커버 가수 이름을 크레딧에서 먼저 분리한다. 괄호 안의 슬래시는 보존한다.
+    const head = isCover ? text.replace(/\s*(?:[|│┃]|\s\/\s|\s[lI]\s)\s*[^|│┃/]*?\bcover(?:ed)?\b.*$/iu, '').trim() : text;
+    inspect(head);
+    if (descriptionCredits.includes(raw)) {
+      const quoted = text.match(/^([^「『]+)[「『]([^」』]+)[」』]$/u);
+      if (quoted) pair(quoted[2], quoted[1]);
+    }
+    const withArtist = head.match(/^(.+?)\s*\(([^()/|]+)\)\s*$/u);
+    if (isCover && withArtist) pair(withArtist[1], withArtist[2]);
   }
   return matches;
 }
@@ -158,6 +212,9 @@ function selectSong(input, index, reading) {
     return { status: '스킵', reason: '비공개 또는 삭제된 영상', keywords: [], candidates: [] };
   }
   const evidence = videoEvidence(input);
+  const descriptionCredits = explicitOriginals(input);
+  const labeledTitles = descriptionCredits.filter(t => japanese.test(t) && !creditSeparator.test(t) && !/[「『]/u.test(t));
+  if (labeledTitles.length === 1) evidence.titles.push(labeledTitles[0]);
   const parts = evidence.titles.map(titleParts);
   const versions = unique(parts.map(p => p.version));
   const keywords = unique(parts.map(p => p.base));
@@ -167,7 +224,7 @@ function selectSong(input, index, reading) {
   if (originalTitles.some(t => /메들리|매시업|マッシュアップ|メドレー|\b(?:medley|mashup)\b/i.test(t))) {
     return { status: '확인 필요', reason: '메들리·매시업은 곡별로 확인해야 합니다.', keywords, candidates: [] };
   }
-  const coverMatches = bracketedCoverMatch(originalTitles, index);
+  const coverMatches = bracketedCoverMatch(originalTitles, index, descriptionCredits);
   if (coverMatches.size > 1) {
     return { status: '확인 필요', reason: '커버 제목에 여러 원곡이 표시됨', keywords, candidates: [...coverMatches.values()] };
   }
@@ -213,7 +270,9 @@ function selectSong(input, index, reading) {
   const reason = !artists.length ? '원곡 가수 근거 없음' : !sameArtist.length ? '가수 불일치' :
     !matchingVersion.length ? '버전 일치 확인 필요' : !eligible.length ? '한자 표기가 다르고 독음만 일치' :
     '동일 가수의 후보 번호 여러 개';
-  return { status: '확인 필요', reason, keywords, candidates };
+  const possible = candidates.length === 1 && !versions.length && !sameArtist.length &&
+    /[가-힣]/u.test(input.title) && keywords.some(k => japanese.test(k) && key(k) === key(titleParts(candidates[0].title_primary).base));
+  return { status: '확인 필요', reason, keywords, candidates, titleCandidate: possible ? candidates[0] : undefined };
 }
 
 // ID가 없는 텍스트 목록은 원래 행을 유지하고, 곡명·가수가 함께 유일할 때만 별칭을 빌린다.

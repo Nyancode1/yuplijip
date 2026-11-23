@@ -12,12 +12,26 @@ import java.util.Locale;
 
 final class ThumbnailStore {
     private static final int MAX_BYTES = 8 * 1024 * 1024;
+    private static final long MAX_AGE = 30L * 24 * 60 * 60 * 1000;
     private final File directory;
     private final Object[] locks = new Object[32];
 
     ThumbnailStore(File files) {
         directory = new File(files, "song-thumbnails");
         for (int i = 0; i < locks.length; i++) locks[i] = new Object();
+        new Thread(() -> {
+            File[] filesInCache = directory.listFiles();
+            if (filesInCache == null) return;
+            for (File image : filesInCache) {
+                if (!image.getName().matches("[0-9a-f]{64}")) continue;
+                int index = Integer.parseInt(image.getName().substring(0, 2), 16) % locks.length;
+                synchronized (locks[index]) { if (expired(image)) image.delete(); }
+            }
+        }, "thumbnail-expiry").start();
+    }
+
+    private static boolean expired(File file) {
+        return file.lastModified() <= System.currentTimeMillis() - MAX_AGE;
     }
 
     private static boolean allowed(URL url) {
@@ -36,7 +50,7 @@ final class ThumbnailStore {
         for (byte b : digest) name.append(String.format(Locale.ROOT, "%02x", b & 255));
         File target = new File(directory, name.toString());
         synchronized (locks[(digest[0] & 255) % locks.length]) {
-            String mime = imageType(target);
+            String mime = expired(target) ? null : imageType(target);
             if (mime == null) {
                 if (!directory.isDirectory() && !directory.mkdirs() && !directory.isDirectory()) throw new IOException();
                 File temporary = File.createTempFile("incoming-", ".tmp", directory);
@@ -47,7 +61,7 @@ final class ThumbnailStore {
                     Files.move(temporary.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
                 } finally { temporary.delete(); }
             }
-            return new WebResourceResponse(mime, null, new FileInputStream(target));
+            return new WebResourceResponse(mime, null, 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-store"), new FileInputStream(target));
         }
     }
 

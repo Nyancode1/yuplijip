@@ -43,8 +43,9 @@ const SongbookLibrary = (() => {
       return new Promise((resolve,reject) => { tx.oncomplete = resolve; tx.onabort = () => reject(tx.error); });
     },
     get: id => read('songs', id),
-    async save(id, playlist) {
-      const entry = { id, name: playlist.name, savedAt: Date.now() };
+    async save(id, playlist, savedAt = Date.now()) {
+      const entry = { id, name: playlist.name, savedAt };
+      if (playlist.youtubeId) Object.assign(entry, { youtubeId:playlist.youtubeId, fetchedAt:playlist.fetchedAt });
       await write(id, entry, playlist);
       return entry;
     },

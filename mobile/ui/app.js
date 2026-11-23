@@ -3,6 +3,7 @@ const filters = [['전체','all'],['번호 있음','available'],['번호 미확�
 let current, lastPlaylist, selected = 'all', entries = [], worker;
 let currentId, lastId, pendingDelete, catalogPromise, artTarget;
 const savedEntries = new Map();
+const matchingRevision = 2;
 const element = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -65,6 +66,7 @@ function showPlaylist(playlist, id = lastId) {
   el('search').value = '';
   el('return').hidden = !lastPlaylist || currentId === lastId;
   el('collection').hidden = !playlist;
+  el('source').hidden = !playlist?.youtubeId;
   if (!playlist) {
     entries = []; el('hero').replaceChildren(); el('tracks').replaceChildren();
     el('tools').hidden = true;
@@ -88,19 +90,21 @@ function showPlaylist(playlist, id = lastId) {
     cover.setAttribute('aria-label', row.title + ' 썸네일 선택');
     cover.append(picture(row)); cover.onclick = () => chooseArt(row);
     song.append(cover,name);
-    const tag = element(row.match ? 'button' : 'span','tag');
-    if (row.match) {
-      tag.append(element('em','',row.original || row.status === '원곡 반주' ? '원곡 TJ' : 'TJ'),element('b','',row.match.number));
-      tag.setAttribute('aria-label', 'TJ ' + row.match.number + ' 복사');
-      tag.onclick = () => copyNumber(row.match.number);
+    const displayed = row.match || row.candidate;
+    const tag = element(displayed ? 'button' : 'span','tag');
+    if (displayed) {
+      const label = !row.match ? 'TJ 후보' : row.original || row.status === '원곡 반주' ? '원곡 TJ' : 'TJ';
+      tag.append(element('em','',label),element('b','',displayed.number));
+      tag.setAttribute('aria-label', label + ' ' + displayed.number + ' 복사');
+      tag.onclick = () => copyNumber(displayed.number);
     } else {
       tag.textContent = row.parts?.length ? '메들리' : row.private || row.status === '스킵' ? '비공개' : '번호 미확인';
     }
     node.append(song,tag); list.append(node);
-    const numbers = row.match ? [row.match] : row.parts || [];
+    const numbers = displayed ? [displayed] : row.parts || [];
     const text = [row.title, row.artist, row.channel, ...(row.aliases || []),
       ...numbers.flatMap(m => [m.title, m.artist, 'TJ ' + m.number])].map(fold).join('\n');
-    return { node, line, text, available: numbers.length > 0 };
+    return { node, line, text, available: Boolean(row.match || row.parts?.length) };
   });
   const empty = element('p','empty'); empty.id = 'empty'; empty.setAttribute('role','status'); list.append(empty);
   el('tracks').replaceChildren(list);
@@ -113,6 +117,7 @@ function copyNumber(number) {
   else navigator.clipboard.writeText(String(number));
 }
 window.handleBack = () => {
+  if (el('policy').open) { el('policy').close(); return true; }
   if (el('books').open) {
     if (el('load').disabled) return true;
     if (pendingDelete) { pendingDelete = null; drawBooks(); } else el('books').close();
@@ -132,6 +137,7 @@ el('return').onclick = () => showPlaylist(lastPlaylist);
 function setBusy(busy) {
   el('load').disabled = busy;
   el('more').disabled = busy;
+  el('register').disabled = busy;
 }
 async function readJson(file) {
   const response = await fetch(file);
@@ -140,6 +146,23 @@ async function readJson(file) {
 }
 function personalBooks() {
   return [...savedEntries.values()].filter(book => !book.removed).sort((a,b) => b.savedAt - a.savedAt);
+}
+async function readBook(entry) {
+  if (YouTubePlaylist.expired(entry)) return fetchBook(entry.youtubeId, entry.savedAt);
+  const book = await SongbookLibrary.get(entry.id);
+  if (!book?.rows || book.matchingRevision === matchingRevision) return book;
+  // 기존 번호, 메들리, 사진, 순서를 유지하고 번호가 없던 행만 새 규칙으로 대조한다.
+  const missing = book.rows.filter(r => r.title && !r.match && !r.parts?.length && !r.private);
+  try {
+    const updated = missing.length ? await match(missing.map(PlaylistReader.songInput)) : [];
+    const byRow = new Map(missing.map((row, i) => [row, updated[i]]));
+    const playlist = { ...book, matchingRevision, rows:book.rows.map(row => {
+      const result = byRow.get(row);
+      return result ? { ...row, match:result.match, candidate:result.candidate, original:result.original } : row;
+    }) };
+    await SongbookLibrary.save(entry.id, playlist, entry.savedAt);
+    return playlist;
+  } catch { return book; }
 }
 function drawBooks() {
   const links = el('bookLinks');
@@ -174,8 +197,8 @@ async function changeBook(book, remove) {
       let nextId = lastId, nextList = lastPlaylist;
       if (book.id === lastId) {
         const next = personalBooks().find(item => item.id !== book.id);
-        nextId = next?.id;
-        nextList = next ? await SongbookLibrary.get(next.id) : null;
+        nextId = next && !YouTubePlaylist.expired(next) ? next.id : undefined;
+        nextList = nextId ? await readBook(next) : null;
       }
       await SongbookLibrary.remove(book.id);
       lastId = nextId; lastPlaylist = nextList;
@@ -184,11 +207,12 @@ async function changeBook(book, remove) {
       else el('return').hidden = currentId === lastId;
       pendingDelete = null; drawBooks();
     } else {
-      const playlist = book.id === lastId ? lastPlaylist : await SongbookLibrary.get(book.id);
+      const playlist = book.id === lastId && lastPlaylist && !YouTubePlaylist.expired(book) ? lastPlaylist : await readBook(book);
       if (!playlist?.rows) throw Error();
+      if (book.id === lastId) lastPlaylist = playlist;
       showPlaylist(playlist, book.id); el('books').close(); el('message').textContent = '';
     }
-  } catch { el('bookMessage').textContent = remove ? '삭제하지 못했습니다. 다시 시도해 주세요.' : '선곡표를 열지 못했습니다.'; }
+  } catch (error) { el('bookMessage').textContent = remove ? '삭제하지 못했습니다. 다시 시도해 주세요.' : error.message || '선곡표를 열지 못했습니다.'; }
   finally { setBusy(false); }
 }
 el('more').onclick = () => {
@@ -214,6 +238,7 @@ el('form').onsubmit = async e => {
   if (el('load').disabled) return;
   const terms = el('catalogQuery').value.trim().split(/\s+/u).map(fold).filter(Boolean);
   if (!terms.length) return;
+  el('books').close();
   setBusy(true); el('catalogQuery').blur(); el('message').textContent = '';
   try {
     catalogPromise ||= readJson('catalog.json').catch(error => { catalogPromise = null; throw error; });
@@ -231,23 +256,62 @@ el('form').onsubmit = async e => {
   } catch { el('message').textContent = '곡목을 읽지 못했습니다.'; }
   finally { setBusy(false); }
 };
-el('importList').onclick = () => { el('books').close(); el('listFile').click(); };
-el('listFile').onchange = async e => {
-  const file = e.target.files[0]; e.target.value = '';
-  if (!file || el('load').disabled) return;
+el('policyFirst').onclick = el('policyMenu').onclick = () => el('policy').showModal();
+el('closePolicy').onclick = () => el('policy').close();
+el('source').onclick = () => el('tracks').scrollIntoView();
+el('consent').hidden = localStorage.getItem('youtubeConsent') === '1';
+
+function customPictures(book) {
+  if (book?.customArt) return book.customArt;
+  return Object.fromEntries((book?.rows || []).filter(r => r.id && r.art?.startsWith('data:image/')).map(r => [r.id, r.art]));
+}
+async function fetchBook(youtubeId, savedAt) {
+  const source = await YouTubePlaylist.load(youtubeId, undefined, n => {
+    el('message').textContent = n + '곡을 읽었습니다…';
+  });
+  el('message').textContent = 'TJ 번호를 찾는 중…';
+  const id = 'youtube:' + youtubeId;
+  const art = customPictures(await SongbookLibrary.get(id));
+  const rows = await match(source.rows.map(song => ({ ...song, art:art[song.id] || PlaylistReader.artwork(song.art) })));
+  const playlist = { ...source, rows, matchingRevision };
+  savedEntries.set(id, await SongbookLibrary.save(id, playlist, savedAt));
+  el('message').textContent = '';
+  return playlist;
+}
+el('registerForm').onsubmit = async e => {
+  e.preventDefault();
+  if (el('register').disabled) return;
   setBusy(true);
   try {
+    const youtubeId = YouTubePlaylist.playlistId(el('playlistLink').value);
+    if (!el('consent').hidden) {
+      if (!el('accept').checked) { el('accept').focus(); throw Error('등록하려면 이용약관과 개인정보 처리방침을 확인하고 동의해 주세요.'); }
+      localStorage.setItem('youtubeConsent', '1'); el('consent').hidden = true;
+    }
+    el('playlistLink').blur();
     el('message').textContent = '곡 목록을 읽는 중…';
-    const source = PlaylistReader.parse(await file.text(), file.name);
-    const rows = await match(source.rows);
-    const playlist = { name:source.name, rows };
-    const id = 'file:' + file.name;
-    savedEntries.set(id, await SongbookLibrary.save(id, playlist));
-    lastId = id; lastPlaylist = playlist; showPlaylist(playlist);
-    el('message').textContent = '';
-  } catch (error) { el('message').textContent = error instanceof SyntaxError ? '곡 목록 파일 형식을 확인해 주세요.' : error.message; }
+    const playlist = await fetchBook(youtubeId);
+    lastId = 'youtube:' + youtubeId; lastPlaylist = playlist; showPlaylist(playlist);
+    el('playlistLink').value = '';
+  } catch (error) { el('message').textContent = error.message || '플레이리스트를 읽지 못했습니다.'; }
   finally { setBusy(false); }
 };
+async function expireBooks() {
+  for (const entry of savedEntries.values()) {
+    if (!entry.fetchedAt || !YouTubePlaylist.expired(entry)) continue;
+    const book = await SongbookLibrary.get(entry.id);
+    const stub = { youtubeId:entry.youtubeId, name:'YouTube 플레이리스트 · ' + entry.youtubeId.slice(-6), customArt:customPictures(book) };
+    savedEntries.set(entry.id, await SongbookLibrary.save(entry.id, stub, entry.savedAt));
+    if (lastId === entry.id) lastPlaylist = null;
+    if (currentId === entry.id) showPlaylist(null);
+  }
+}
+document.addEventListener('visibilitychange', async () => {
+  if (document.hidden || el('load').disabled) return;
+  setBusy(true);
+  try { await expireBooks(); if (el('books').open) drawBooks(); }
+  finally { setBusy(false); }
+});
 function chooseArt(row) {
   artTarget = { row, id:currentId, playlist:current };
   el('artFile').click();
@@ -281,12 +345,13 @@ el('artFile').onchange = async e => {
   try { legacy = JSON.parse(localStorage.getItem('lastList')); } catch {}
   try {
     for (const entry of await SongbookLibrary.list()) savedEntries.set(entry.id, entry);
+    await expireBooks();
     if (legacy?.rows?.length) {
       if (!savedEntries.has('previous')) savedEntries.set('previous', await SongbookLibrary.save('previous', legacy));
       localStorage.removeItem('lastList');
     }
     const latest = personalBooks()[0];
-    if (latest) { lastPlaylist = await SongbookLibrary.get(latest.id); lastId = latest.id; }
-  } catch { lastPlaylist = legacy; }
+    if (latest) { lastPlaylist = await readBook(latest); lastId = latest.id; }
+  } catch (error) { lastPlaylist = legacy; el('message').textContent = error.message || '저장한 목록을 열지 못했습니다.'; }
   showPlaylist(lastPlaylist);
 })().catch(() => { el('message').textContent = '저장된 목록을 열지 못했습니다.'; }).finally(() => setBusy(false));

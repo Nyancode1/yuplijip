@@ -32,8 +32,11 @@ const PlaylistReader = (() => {
       });
     }
     if (!Array.isArray(items) || !items.length) throw Error('곡 목록에서 제목을 찾지 못했습니다.');
-    const list = v => Array.isArray(v) ? v.filter(t => typeof t === 'string' && t.trim()) : [];
-    const rows = items.map((input, i) => {
+    return { name, rows:items.map(songInput) };
+  }
+
+  const list = v => Array.isArray(v) ? v.filter(t => typeof t === 'string' && t.trim()) : [];
+  function songInput(input, i) {
       const row = typeof input === 'string' ? { title: input } : input;
       if (typeof row?.title !== 'string' || !row.title.trim()) throw Error((i + 1) + '번째 곡의 제목이 없습니다.');
       const artist = typeof row.artist === 'string' ? row.artist.trim() : '';
@@ -41,10 +44,10 @@ const PlaylistReader = (() => {
       return { id:typeof row.id === 'string' ? row.id : undefined,
         title:row.title.trim(), artists:[...new Set([...list(row.artists), artist].filter(Boolean))],
         uploader, channels:list(row.channels), titles:list(row.titles), tracks:list(row.tracks),
+        description:typeof row.description === 'string' ? row.description : undefined,
+        savedMatch:row.match, original:row.original,
         availability:row.private ? 'private' : row.availability, art:artwork(row.art || row.thumbnail || row.thumbnailUrl) };
-    });
-    return { name, rows };
   }
-  return { parse, artwork };
+  return { parse, artwork, songInput };
 })();
 if (typeof module !== 'undefined') module.exports = PlaylistReader;
