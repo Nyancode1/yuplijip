@@ -592,9 +592,51 @@ function resolveWork(input, index, reading) {
     reason:linked?'영상에서 지정한 원곡의 제목과 가수가 TJ 등록곡과 일치':'공개 작품 자료의 영상 ID와 TJ 등록곡의 곡명·제작진이 일치'};
 }
 
+function arrangedCoverMatch(input, index, previous) {
+  const description = (input.description || '').normalize('NFKC');
+  if (!description.includes('カバー')) return;
+  const titles = [input.title, ...(input.titles || [])];
+  const headings = new Set();
+  for (const title of titles) {
+    const text = title.normalize('NFKC').trim().replace(/^(?:【[^【】]+】\s*)+/u, '');
+    const heading = text.match(/^(.+?)\s*[-–—]\s*(?:(?:acoustic|piano)\s+)?arrange(?:\s+ver(?:sion)?\.?)?\s*[-–—]\s*(?:cover(?:ed)?\b(?:\s*(?:by\s+.+|【[^【】]+】))?|\/[^/]+【歌ってみた】)$/iu);
+    if (heading) headings.add(key(heading[1]));
+  }
+  if (!headings.size) return;
+
+  // 설명에서 커버했다고 명시한 문장만 읽는다. 추천, 예고, 다른 영상 소개는 제외한다.
+  const claims = [...description.matchAll(/^[ \t]*([^\r\n「『:：]{1,65}?)(?:さん|様)の(?:「([^「」\r\n]+)」|『([^『』\r\n]+)』)を(?:アレンジ)?カバー(?:させていただきました|しました)[。.!！ \t]*\r?$/gmu)];
+  const creditedArtist = name => name.split(/\s*×\s*|\s+[xX]\s+/u).map(artistKey).join('|');
+  const credits = claims.map(([, artist, name, quoted]) => ({
+    title: key(name || quoted), artist: creditedArtist(artist)
+  }));
+  const credit = credits.find(c => headings.has(c.title));
+  if (!credit) return;
+  const held = {status:'확인 필요', reason:'편곡 커버의 원곡 크레딧이 서로 다름', keywords:previous.keywords, candidates:[]};
+  if (!credits.every(c => c.artist === credit.artist && c.title === credit.title)) return held;
+
+  const rows = [];
+  for (const [record] of index.get(credit.title) || []) {
+    const row = record.row;
+    const exact = key(titleParts(row.title_primary).base) === credit.title || index.workNames.get(row.karaoke_numbers.tj)?.has(credit.title);
+    const artistMatches = credit.artist.includes('|')
+      ? [row.artist_primary, row.artist_ko, ...(row.artist_aliases || [])].filter(Boolean).some(a => creditedArtist(a) === credit.artist)
+      : record.artistKeys.has(credit.artist);
+    if (exact && !record.version && artistMatches) rows.push(row);
+  }
+  if (!rows.length) return {...held, reason:'명시된 편곡 원곡의 제목·가수와 일치하는 TJ 번호 없음'};
+  if (rows.length > 1) return {...held, reason:'편곡 커버와 일치하는 여러 원곡 번호', candidates:rows};
+  if (previous.row && previous.row !== rows[0]) return held;
+  return {status:'원곡 반주', row:rows[0], reason:'편곡 영상 제목과 설명의 원곡명·가수가 TJ 등록곡과 일치',
+    keywords:previous.keywords, candidates:[]};
+}
+
 function selectByEvidence(input,index,reading) {
   const result=resolveWork(input,index,reading);
-  if (result.row || result.status==='스킵' || /메들리|매시업|서로 다름|여러 원곡|번호 여러 개/u.test(result.reason)) return result;
+  if (result.status==='스킵' || /메들리|매시업|서로 다름|여러 원곡|번호 여러 개/u.test(result.reason)) return result;
+  const arranged = arrangedCoverMatch(input, index, result);
+  if (arranged) return arranged;
+  if (result.row) return result;
   // 제목 필드의 완결된 단어만 대조한다. 소개문·가사에 우연히 들어간 작품명은 사용하지 않는다.
   const headings=unique([input.title,...(input.titles||[]),...(input.tracks||[])]);
   const titleText=headings.map(key).join(' ');

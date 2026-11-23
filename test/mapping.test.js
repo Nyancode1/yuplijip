@@ -80,6 +80,39 @@ test('공식 MV 뒤의 영문 표기는 동일 가수를 확인하고, 동명 �
   assert.equal(hit.titleCandidate,undefined);
 });
 
+test('편곡 커버는 영상 안의 곡명과 설명에 직접 적힌 원곡 가수를 함께 검증한다', () => {
+  const original = row('101', '風の窓', 'Blue X 星野');
+  const homonym = row('102', '風の窓', '別人');
+  const other = row('103', '別の曲', 'Blue X 星野');
+  const similarName = row('105', '風の窓', 'BlueX星野');
+  const index = indexCatalog([original, homonym, other, similarName], read);
+  const run = input => selectSong(input, index, read);
+  const title = '【物語】風の窓 -Arrange ver.- cover【歌い手】';
+  const description = 'Blue×星野さんの『風の窓』をアレンジカバーさせていただきました。';
+  for (const heading of [title, '風の窓-Acoustic Arrange-／歌い手【歌ってみた】']) {
+    for (const line of [description, 'Blue×星野様の「風の窓」をカバーしました！']) {
+      const result = run({title:heading, description:'クレジット\r\n' + line + '\r\nVocal: 歌い手'});
+      assert.equal(result.row, original);
+      assert.equal(result.status, '원곡 반주');
+    }
+  }
+  for (const input of [
+    {title, description:'Blue×星野さんの『風の窓』をカバーしたいです'},
+    {title, description:'Blue×星野さんの『別の曲』をカバーしました'},
+    {title, description:'知らない人さんの『風の窓』をカバーしました'},
+    {title, description:description + '\n別人様の「風の窓」をカバーしました'},
+    {title, description:description + '\nBlue×星野さんの「別の曲」をカバーしました'},
+    {title, description:description + '\n원곡자: 다른 사람'},
+    {title, description, originalVideo:{title:'風の窓', artists:['別人']}},
+    {title:'風の窓と別の曲 -Arrange ver.-cover【歌い手】', description},
+    {title, titles:['風の窓メドレー'], description},
+    {title, description, availability:'private'},
+  ]) assert.equal(run(input).row, undefined);
+  assert.equal(match({title, description}, [original, row('104','風の窓','Blue X 星野')]).row, undefined);
+  const duet = row('106', '風の窓', 'Blue×星野');
+  assert.equal(match({title, description}, [duet, similarName]).row, duet);
+});
+
 test('등록된 원곡·커버 영상과 본가 표기를 검증하고 크레딧 충돌은 보류한다', () => {
   const songs=[row('1','銀の夜','Singer A'),row('2','海の風','Singer B')];
   const works=[{number:'1',artists:['Singer A'],titles:['Silver Skyline'],ids:['Youtube:aaaaaaaaaaa','NicoNicoDouga:sm123456']},
