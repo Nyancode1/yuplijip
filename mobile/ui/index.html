@@ -1,0 +1,21 @@
+<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121214">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'">
+<title>유플리집</title><link rel="stylesheet" href="app.css"></head>
+<body><main>
+<header><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span><h1>유플리집</h1><button id="more" type="button" aria-label="더보기" aria-haspopup="dialog" aria-controls="books" disabled><span aria-hidden="true"></span></button></header>
+<form id="form"><label for="catalogQuery">TJ 곡 찾기</label><div class="input"><input id="catalogQuery" type="search" required placeholder="곡명, 가수 또는 TJ 번호" autocomplete="off" enterkeyhint="search"><button id="load" type="submit">검색</button></div></form>
+<input type="file" id="listFile" accept=".txt,.json,.jsonl,text/plain,application/json" hidden>
+<input type="file" id="artFile" accept="image/*" hidden>
+<p id="message" role="status" aria-live="polite"></p>
+<button type="button" id="return" hidden>이전 목록으로</button>
+<section class="collection" id="collection" hidden><div class="hero-art" id="hero" aria-hidden="true"></div><div><h2 id="title">내 선곡표</h2><p id="count"></p></div></section>
+<div class="tools" id="tools" hidden><div class="input search"><input id="search" type="search" aria-label="이 목록에서 곡 검색" placeholder="곡명, 가수, TJ 번호 검색" autocomplete="off" enterkeyhint="search"><button id="clear" type="button" aria-label="검색어 지우기" hidden>×</button></div>
+<nav id="filters" aria-label="곡 상태 필터"></nav>
+</div>
+
+<section id="tracks" aria-label="곡 목록"></section>
+</main>
+<dialog id="books" aria-labelledby="booksTitle"><div class="libraryHead"><h2 id="booksTitle">저장된 플레이리스트</h2><button type="button" id="closeBooks" aria-label="닫기">×</button></div><button type="button" id="importList">기기에서 곡 목록 가져오기</button><div id="bookLinks"></div><p id="bookMessage" role="status"></p></dialog>
+<script src="playlist.js"></script><script src="library.js"></script><script src="app.js"></script></body></html>

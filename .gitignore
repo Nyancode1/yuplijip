@@ -1,0 +1,14 @@
+/private/
+/mobile/build/
+/dist/
+/node_modules/
+/data/*
+!/data/tj_catalog.json
+!/data/alfex-SOURCE.txt
+/release/*
+!/release/yuplijip.apk
+*.keystore
+*.p12
+*.jks
+.env
+.env.*

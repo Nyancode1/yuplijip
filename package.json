@@ -1,0 +1,13 @@
+{
+  "name": "yuplijip",
+  "version": "1.5.1",
+  "private": true,
+  "scripts": {
+    "match": "node src/tj_search.js",
+    "test": "node test/mapping.test.js"
+  },
+  "dependencies": {
+    "kuromoji": "0.1.2",
+    "wanakana": "5.3.1"
+  }
+}

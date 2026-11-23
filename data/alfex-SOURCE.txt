@@ -1,0 +1,5 @@
+TJ 일본곡 번호·곡명·가수
+번호책 — Alfex4936/tj-media-karaoke-api
+https://github.com/Alfex4936/tj-media-karaoke-api
+https://alfex4936.github.io/tj-media-karaoke-api/
+원자료: TJ미디어. 추가 신곡의 공식 확인일과 출처는 tj_catalog.json의 officialJapan에 기록한다.
