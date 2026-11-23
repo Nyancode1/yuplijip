@@ -65,7 +65,8 @@ async function searchNumbers(prefix, nation, wanted) {
       const title = chunk.match(/class="grid-item title3"[\s\S]*?<p class=""><span>([\s\S]*?)<\/p>/)?.[1];
       const artist = chunk.match(/class="grid-item title4 singer"><p>([\s\S]*?)<\/p>/)?.[1];
       if (!title || !artist) throw new Error('TJ 검색 결과 곡명·가수 누락 ' + number);
-      const hit = { title: textOf(title), artist: textOf(artist) };
+      const composer = chunk.match(/class="grid-item title6"><p>([\s\S]*?)<\/p>/)?.[1] || '';
+      const hit = { title: textOf(title), artist: textOf(artist), composer:textOf(composer) };
       const prior = rows.get(number);
       if (prior && (prior.title !== hit.title || prior.artist !== hit.artist)) throw new Error('동일 번호의 검색 결과 충돌 ' + number);
       rows.set(number, hit);
@@ -120,4 +121,5 @@ async function update() {
     verified.size, merged.songs.length - current.songs.length, merged.songs.length, official.through);
 }
 
+module.exports={searchNumbers};
 if (require.main === module) update().catch(error => { console.error(error.message); process.exitCode = 1; });

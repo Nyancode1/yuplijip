@@ -44,3 +44,16 @@ powershell -NoProfile -ExecutionPolicy Bypass -File mobile/build.ps1
 `src/export_alfex.js`는 Alfex 번호책의 일본곡 검색 결과에서 번호·제목·가수와 제공된 한글 독음을 읽습니다. 내보낸 JSON에 `node src/import_catalog.js <파일>`을 실행하면 중복 번호와 필수 항목을 검증합니다. `node src/update_tj_catalog.js`는 TJ 최신곡의 번호·제목·가수를 공식 일본곡 검색과 대조해 추가합니다. 곡목을 바꾼 뒤 APK를 다시 빌드합니다.
 
 개인 곡 목록을 PC에서 변환하려면 `npm run match -- <목록 파일>`을 실행합니다. 변환 결과는 `private/pc/data/`에 저장됩니다.
+
+전체 곡목과 외부 사전을 갱신할 때는 다음 명령을 사용합니다. 첫 번째 명령의 마지막 인수에는 JMdict-Simplified 영어 JSON 파일 경로를 지정합니다.
+
+작품 자료를 만들 때는 Unicode 17.0.0의 `Unihan_Readings.txt`와 `Unihan_Variants.txt`를 압축에서 꺼내 `mobile/build/`에 둡니다. [Unicode 17.0.0 Unihan 자료](https://www.unicode.org/Public/17.0.0/ucd/Unihan.zip)
+
+```powershell
+node src/update_catalog_metadata.js fresh <JMdict-영어-JSON-경로>
+node src/update_work_sources.js
+node src/update_recording_aliases.js
+npm.cmd test
+```
+
+VocaDB에서는 평점순 원곡 5,000건을 번호책과 대조하고, 보이스뱅크 명의가 있으면서 아직 연결되지 않은 TJ 곡은 등록 제목으로 추가 조회합니다. 원곡 항목이 없으면 같은 제목의 리마스터 음원도 대조합니다. 작품을 식별하면 연결된 커버·리믹스의 영상 ID와 크레딧을 수집합니다. Wikidata에서는 일본곡 번호책에 두 곡 이상 등록된 가수의 작품명과 다국어 표기를 확인하며, 작곡자의 별칭은 TJ 등록 크레딧과 일치할 때 사용합니다. 두 작업의 다운로드 캐시는 `mobile/build/work-metadata-v2/`와 `mobile/build/wikidata/`에 저장합니다. 새 시점의 자료를 받을 때는 이 캐시를 새 디렉터리로 옮긴 후 실행합니다.

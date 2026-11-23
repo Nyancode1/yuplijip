@@ -29,7 +29,7 @@ const YouTubePlaylist = (() => {
     const ids = new Set();
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
-      if (!/^[^\p{L}\p{N}]*(?:original(?:\s+(?:song|music|work|video))?\b|원곡(?:자|\s*영상)?|(?:ご|御)?本家(?:様)?|原曲)(?=[^\p{L}\p{N}]|$)/iu.test(line)) continue;
+      if (!/^[^\p{L}\p{N}]*(?:original(?:\s+(?:song|music|work|video))?\b|원곡(?:자|\s*영상)?|원본(?:\s*영상)?(?:은|는)?|(?:음원\s*)?출처(?=\s*[:：])|(?:ご|御)?本家(?:様)?|原曲)(?=[^\p{L}\p{N}]|$)/iu.test(line)) continue;
       let block = line;
       // 크레딧 아래의 URL 줄만 읽어 다음 가수나 홍보 링크를 섞지 않는다.
       for (let j=i+1;j<Math.min(i+5,lines.length);j++) {
@@ -53,6 +53,24 @@ const YouTubePlaylist = (() => {
   }
   const titlesOf = item => [...new Set([item?.snippet?.title, item?.snippet?.localized?.title,
     item?.localizations?.ja?.title, item?.localizations?.ko?.title].filter(Boolean))];
+
+  function linkedVideo(v,channels) {
+    return {id:v.id,title:v.snippet.title,titles:titlesOf(v),uploader:v.snippet.channelTitle,
+      description:v.snippet.description,channels:channels||[]};
+  }
+
+  async function refreshOriginals(book,get=request) {
+    if (!book.youtubeId || book.originalMetadataRevision===1) return book;
+    const ids=[...new Set(book.rows.filter(r=>!r.private).map(r=>originalVideo(r.description)).filter(Boolean))];
+    const videos=new Map();
+    for (let i=0;i<ids.length;i+=50)
+      for (const v of (await get('videos',ids.slice(i,i+50).join(','))).items) videos.set(v.id,v);
+    const rows=book.rows.map(row=>{
+      const v=videos.get(originalVideo(row.description));
+      return v && v.id!==row.id ? {...row,originalVideo:linkedVideo(v,row.originalVideo?.channels)} : row;
+    });
+    return {...book,rows,originalMetadataRevision:1};
+  }
 
   async function load(id, get = request, progress = () => {}) {
     const header = await get('playlists', id);
@@ -91,14 +109,13 @@ const YouTubePlaylist = (() => {
     for (const row of rows) {
       row.channels=channels.get(videos.get(row.id)?.snippet?.channelId) || [];
       const ref=originalVideo(row.description), original=videos.get(ref);
-      if (ref !== row.id && original) row.originalVideo={title:original.snippet.title, titles:titlesOf(original),
-        uploader:original.snippet.channelTitle, channels:channels.get(original.snippet.channelId) || []};
+      if (ref !== row.id && original) row.originalVideo=linkedVideo(original,channels.get(original.snippet.channelId));
     }
-    return { name:header.items[0].snippet.title, rows, youtubeId:id, fetchedAt:Date.now() };
+    return { name:header.items[0].snippet.title, rows, youtubeId:id, fetchedAt:Date.now(),originalMetadataRevision:1 };
   }
   function expired(entry, now = Date.now()) {
     return Boolean(entry.youtubeId && (!entry.fetchedAt || now - entry.fetchedAt >= lifetime));
   }
-  return { playlistId, load, expired, originalVideo };
+  return { playlistId, load, expired, originalVideo, refreshOriginals };
 })();
 if (typeof module !== 'undefined') module.exports = YouTubePlaylist;

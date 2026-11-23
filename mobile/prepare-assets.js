@@ -21,13 +21,17 @@ function prepare() {
     'node_modules/lodash/LICENSE': 'licenses/lodash.txt',
     'node_modules/zlibjs/LICENSE': 'licenses/zlibjs.txt',
     'docs/NOTICES.md': 'licenses/NOTICES.md',
+    'docs/unicode-license.txt': 'licenses/unicode.txt',
     'data/alfex-SOURCE.txt': 'licenses/alfex-source.txt',
+    'data/loanwords.json':'loanwords.json',
   };
   for (const [src, dst] of Object.entries(copies)) {
     fs.cpSync(resolve(src), path.join(assets, dst), { recursive: true });
   }
-  const { songs } = JSON.parse(fs.readFileSync(resolve('data/tj_catalog.json'), 'utf8'));
-  const fields = ['title_primary', 'title_ruby', 'title_ko', 'title_ko_source', 'artist_primary', 'artist_ko', 'artist_aliases'];
+  const songs = require('../src/catalog')();
+  const works = [...require('../data/work_sources.json'), ...require('../data/recording_aliases.json')];
+  fs.writeFileSync(path.join(assets, 'work_sources.json'), JSON.stringify(works));
+  const fields = ['title_primary', 'title_ruby', 'title_ko', 'title_ko_source', 'artist_primary', 'artist_ko', 'artist_aliases','composer','supplement'];
   const records = songs.map(song => ({
     ...Object.fromEntries(fields.map(key => [key, song[key]])), karaoke_numbers: { tj: song.karaoke_numbers.tj },
   }));

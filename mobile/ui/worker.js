@@ -1,12 +1,13 @@
 importScripts('lib/wanakana.js', 'lib/kuromoji.js', 'lib/matching.js');
 let ready;
 async function prepare() {
-  const [songs, tokenizer] = await Promise.all([
+  const [songs, tokenizer, loanwords, works] = await Promise.all([
     fetch('catalog.json').then(r => r.json()),
     new Promise((resolve, reject) => kuromoji.builder({ dicPath: 'dict' }).build((err,t) => err ? reject(err) : resolve(t))),
+    ...['loanwords.json','work_sources.json'].map(name=>fetch(name).then(r=>r.json())),
   ]);
   const reading = TJMatching.makeReader(tokenizer);
-  return { reading, index: TJMatching.indexCatalog(songs, reading),
+  return { reading, index: TJMatching.indexCatalog(songs, reading,{loanwords,works}),
     byNumber:new Map(songs.map(row => [row.karaoke_numbers.tj, row])) };
 }
 self.onmessage = async event => {
@@ -14,8 +15,9 @@ self.onmessage = async event => {
     ready ||= prepare().catch(e => { ready = null; throw e; });
     const { index, reading, byNumber } = await ready;
     const songs = event.data.rows;
-    const rows = songs.map(song => {
-      const result = TJMatching.selectSong(song, index, reading);
+    const results=TJMatching.selectPlaylist(songs,index,reading);
+    const rows = songs.map((song,i) => {
+      const result=results[i];
       const concise = row => ({ number: row.karaoke_numbers.tj, title: row.title_primary, artist: row.artist_primary });
       const saved = song.savedMatch;
       const registered = saved && byNumber.get(String(saved.number));

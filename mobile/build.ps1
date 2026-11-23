@@ -45,9 +45,10 @@ Run-Tool "$JdkPath\bin\javac.exe" @('-encoding','UTF-8','-source','8','-target',
 Run-Tool "$JdkPath\bin\jar.exe" @('cf',"$compiled\classes.jar",'-C',"$compiled\classes",'.')
 Run-Tool "$toolsPath\d8.bat" @('--min-api','28','--lib',$androidJar,'--output',"$compiled\dex","$compiled\classes.jar")
 $archiveArgs = @('uf',"$stage\base.apk",'-C',"$compiled\dex",'classes.dex')
-foreach ($asset in @('index.html','app.js','app.css','playlist.js','youtube.js','youtube.png','library.js','worker.js','catalog.json','update-repository.txt','dict','lib/kuromoji.js','lib/wanakana.js','lib/matching.js','licenses/wanakana.txt','licenses/kuromoji.txt','licenses/kuromoji-notice.txt','licenses/async.txt','licenses/doublearray.txt','licenses/lodash.txt','licenses/zlibjs.txt','licenses/alfex-source.txt','licenses/NOTICES.md')) {
+foreach ($asset in @('index.html','app.js','app.css','playlist.js','youtube.js','youtube.png','library.js','worker.js','catalog.json','loanwords.json','work_sources.json','update-repository.txt','dict','lib/kuromoji.js','lib/wanakana.js','lib/matching.js','licenses/wanakana.txt','licenses/kuromoji.txt','licenses/kuromoji-notice.txt','licenses/async.txt','licenses/doublearray.txt','licenses/lodash.txt','licenses/zlibjs.txt','licenses/alfex-source.txt','licenses/NOTICES.md')) {
     $archiveArgs += @('-C',$packageDir,"assets/$asset")
 }
+$archiveArgs += @('-C',$packageDir,'assets/licenses/unicode.txt')
 Run-Tool "$JdkPath\bin\jar.exe" $archiveArgs
 Run-Tool "$toolsPath\zipalign.exe" @('-f','4',"$stage\base.apk","$stage\aligned.apk")
 if (!(Test-Path -LiteralPath $keystore)) {

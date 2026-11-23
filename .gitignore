@@ -4,6 +4,10 @@
 /node_modules/
 /data/*
 !/data/tj_catalog.json
+!/data/tj_releases.json
+!/data/loanwords.json
+!/data/work_sources.json
+!/data/recording_aliases.json
 !/data/alfex-SOURCE.txt
 /release/*
 !/release/yuplijip.apk

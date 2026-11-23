@@ -34,7 +34,18 @@ const SongbookLibrary = (() => {
       tx.onabort = () => reject(tx.error || Error('저장 실패'));
     });
   }
+  function preview(playlist) {
+    if (!Array.isArray(playlist?.rows)) return {};
+    const covers = [];
+    for (const row of playlist.rows) {
+      const art = PlaylistReader.artwork(row.art);
+      if (art && !covers.includes(art)) covers.push(art);
+      if (covers.length === 4) break;
+    }
+    return {count:playlist.rows.length, covers};
+  }
   return {
+    preview,
     list: () => read('entries'),
     art: number => read('art', String(number)),
     async setArt(number, art) {
@@ -44,7 +55,7 @@ const SongbookLibrary = (() => {
     },
     get: id => read('songs', id),
     async save(id, playlist, savedAt = Date.now()) {
-      const entry = { id, name: playlist.name, savedAt };
+      const entry = { id, name: playlist.name, savedAt, ...preview(playlist) };
       if (playlist.youtubeId) Object.assign(entry, { youtubeId:playlist.youtubeId, fetchedAt:playlist.fetchedAt });
       await write(id, entry, playlist);
       return entry;

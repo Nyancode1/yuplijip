@@ -48,7 +48,9 @@ public class MainActivity extends Activity {
                 String address = req.getUrl().toString();
                 if (req.isForMainFrame() && req.hasGesture() && (
                     address.equals("https://www.youtube.com/t/terms") || address.equals("https://policies.google.com/privacy") ||
-                    address.equals("https://github.com/Nyancode1/yuplijip/issues"))) {
+                    address.equals("https://github.com/Nyancode1/yuplijip/issues") ||
+                    address.equals("https://vocadb.net/") ||
+                    address.equals("https://github.com/Nyancode1/yuplijip/blob/main/docs/NOTICES.md"))) {
                     try { startActivity(new Intent(Intent.ACTION_VIEW, req.getUrl())); }
                     catch (ActivityNotFoundException ignored) {}
                 }

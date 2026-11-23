@@ -45,7 +45,8 @@ const PlaylistReader = (() => {
         title:row.title.trim(), artists:[...new Set([...list(row.artists), artist].filter(Boolean))],
         uploader, channels:list(row.channels), titles:list(row.titles), tracks:list(row.tracks),
         description:typeof row.description === 'string' ? row.description : undefined,
-        savedMatch:row.match, original:row.original, originalVideo:row.originalVideo,
+          savedMatch:row.match, original:row.original, originalVideo:row.originalVideo &&
+            { ...row.originalVideo, id:row.originalVideo.id || (typeof YouTubePlaylist!=='undefined' && YouTubePlaylist.originalVideo(row.description)) || undefined },
         availability:row.private ? 'private' : row.availability, art:artwork(row.art || row.thumbnail || row.thumbnailUrl) };
   }
   return { parse, artwork, songInput };
